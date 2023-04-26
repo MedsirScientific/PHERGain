@@ -1,0 +1,907 @@
+---
+title: "PHERGain | Statistical Analysis of efficacy endpoints for ESMO 2023"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(survival)
+library(survminer)
+library(survMisc)
+library(tidyverse)
+library(ggsurvfit)
+
+here("WP1_esmo23-efficacy_2023-04-24.Rmd")
+```
+
+This report presents the time-to-event primary and secondary efficacy endpoints of the PHERGain study that will be showcased in an oral presentation at ESMO 2023.
+
+```{r, message = FALSE, warning = FALSE}
+data_00_listings <- read_excel(
+  here("data/MedOPP096_PHERGain_3-Year_Listings_DA_2023-04-24.xlsx"),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names()
+
+rmarkdown::paged_table(data_00_listings)
+```
+
+# iDFS RATE IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_01a_groupB <- data_00_listings %>% 
+  filter(
+    cohort == "Cohort B"
+  )
+
+data_01b_groupB_idfs_itt <- data_01a_groupB %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, cohort, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    i_dfs, i_dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = i_dfs,
+    time = i_dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_01b_groupB_idfs_itt$time <- data_01b_groupB_idfs_itt$time * 12
+  
+summary(data_01b_groupB_idfs_itt$fu)
+
+rmarkdown::paged_table(data_01b_groupB_idfs_itt)
+```
+
+```{r}
+customize_labels <- function (p, font.title = NULL,
+                              font.subtitle = NULL, font.caption = NULL,
+                              font.x = NULL, font.y = NULL, font.xtickslab = NULL, font.ytickslab = NULL)
+{
+  original.p <- p
+  if(is.ggplot(original.p)) list.plots <- list(original.p)
+  else if(is.list(original.p)) list.plots <- original.p
+  else stop("Can't handle an object of class ", class (original.p))
+  .set_font <- function(font){
+    font <- ggpubr:::.parse_font(font)
+    ggtext::element_markdown (size = font$size, face = font$face, colour = font$color)
+  }
+  for(i in 1:length(list.plots)){
+    p <- list.plots[[i]]
+    if(is.ggplot(p)){
+      if (!is.null(font.title)) p <- p + theme(plot.title = .set_font(font.title))
+      if (!is.null(font.subtitle)) p <- p + theme(plot.subtitle = .set_font(font.subtitle))
+      if (!is.null(font.caption)) p <- p + theme(plot.caption = .set_font(font.caption))
+      if (!is.null(font.x)) p <- p + theme(axis.title.x = .set_font(font.x))
+      if (!is.null(font.y)) p <- p + theme(axis.title.y = .set_font(font.y))
+      if (!is.null(font.xtickslab)) p <- p + theme(axis.text.x = .set_font(font.xtickslab))
+      if (!is.null(font.ytickslab)) p <- p + theme(axis.text.y = .set_font(font.ytickslab))
+      list.plots[[i]] <- p
+    }
+  }
+  if(is.ggplot(original.p)) list.plots[[1]]
+  else list.plots
+}
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_01b_groupB_idfs_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_01b_groupB_idfs_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt <- customize_labels(
+  idfs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_itt$plot <- idfs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 95.4%
+  (95% CI: 92.8-98.0%)
+  Events: 12/267", 25), collapse = "\n"
+  )
+
+caption2 <- paste(strwrap(
+  "Treatment group B meets the second co-primary endpoint with ≤ 15 patients
+  with iDFS events (p < 0.001)", 55), collapse = "\n"
+  )
+
+idfs_groupB_itt$plot <- idfs_groupB_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+idfs_groupB_itt$plot <- idfs_groupB_itt$plot + annotate(
+  "text", x = 12, y = 0.20,
+  label = caption2,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure1_iDFS_groupB_ITT_2023-04-25.png"),
+#   idfs_groupB_itt,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_itt
+```
+
+# iDFS RATE IN PET-RESPONDERS WHO ACHIEVED A PCR IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_01c_groupB_idfs_pet_pcr <- data_01b_groupB_idfs_itt %>% 
+  filter(
+    pet_response == "Responder",
+    pcr == "Yes"
+  )
+
+summary(data_01c_groupB_idfs_pet_pcr$fu)
+
+rmarkdown::paged_table(data_01c_groupB_idfs_pet_pcr)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_01c_groupB_idfs_pet_pcr), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_01c_groupB_idfs_pet_pcr),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr <- customize_labels(
+  idfs_groupB_idfs_pet_pcr,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 98.8%
+  (95% CI: 96.3-100%)
+  Events: 1/86", 25), collapse = "\n"
+  )
+
+idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-04-25.png"),
+#   idfs_groupB_idfs_pet_pcr,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr
+```
+
+# iDFS RATE IN TREATMENT GROUP B (PP population)
+  
+```{r}
+data_02a_monitoring <- read_excel(
+  here("data/PHERGain_data-management_2023-04-24.xlsx"),
+    sheet = "PHERGain PP exclusions"
+  ) %>% 
+  clean_names() %>% 
+  filter(
+    group == "B",
+    reason_for_exclusion_from_pp_population != "T-DM1 (post iDFS event; NO exclusion)"
+  ) %>% 
+  rename(
+    participant = patient
+  ) %>% 
+  select(participant)
+
+data_02b_groupB_idfs_pp <- anti_join(
+  data_01b_groupB_idfs_itt,
+  data_02a_monitoring,
+  by = "participant"
+)
+
+summary(data_02b_groupB_idfs_pp$fu)
+
+rmarkdown::paged_table(data_02b_groupB_idfs_pp)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_02b_groupB_idfs_pp), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_pp <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_02b_groupB_idfs_pp),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (PP)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_pp <- customize_labels(
+  idfs_groupB_pp,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_pp$plot <- idfs_groupB_pp$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 95.2%
+  (95% CI: 92.5-98.0%)
+  Events: 11/236", 25), collapse = "\n"
+  )
+
+idfs_groupB_pp$plot <- idfs_groupB_pp$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure3_iDFS_groupB_PP_2023-04-25.png"),
+#   idfs_groupB_pp,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_pp
+```
+
+# iDFS RATE BY HORMONE RECEPTOR STATUS IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_01b_groupB_idfs_itt$hormone_receptor_status <- factor(
+  data_01b_groupB_idfs_itt$hormone_receptor_status,
+  levels = c("Positive", "Negative")
+  )
+
+summary(survfit(Surv(time, event) ~ hormone_receptor_status, data = data_01b_groupB_idfs_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_itt_hr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ hormone_receptor_status, data = data_01b_groupB_idfs_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-free survival",
+  pval = TRUE,
+  pval.size = 3.,
+  pval.coord = c(14, 0.2),
+  conf.int = FALSE,
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  ggtheme = theme_classic(),
+  palette = alpha(c("#009FB7", "#2A3030"), c(1.0, 0.65)),
+  legend.labs = c("HR+", "HR-")
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt_hr <- customize_labels(
+  idfs_groupB_itt_hr,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+  
+caption1 <- paste(strwrap(
+  "3-year iDFS rate in HR+ patients: 94.9%
+  (95% CI: 91.8-98.2%)
+  Events: 9/183", 40),
+  collapse = "\n"
+  )
+
+caption2 <- paste(strwrap(
+  "3-year iDFS rate in HR- patients: 96.4%
+  (95% CI: 92.5-100%)
+  Events: 3/84", 40), collapse = "\n"
+  )
+
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + annotate(
+  "text", x = 15, y = 0.60,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + annotate(
+  "text", x = 15, y = 0.40,
+  label = caption2,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot --------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure4_iDFS_groupB_ITT_by-HR_2023-04-25.png"),
+#   idfs_groupB_itt_hr,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_itt_hr
+```
+
+# DDFS RATE IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_03_groupB_ddfs_itt <- data_01a_groupB %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, cohort, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    ddfs, ddfs_time_years, eo_s_distant_recurrence, eos_date_of_distant_recurrence,
+    follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    distant_recurrence = eo_s_distant_recurrence,
+    distant_recurrence_date = eos_date_of_distant_recurrence,
+    event = ddfs,
+    time = ddfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_03_groupB_ddfs_itt$time <- data_03_groupB_ddfs_itt$time * 12
+  
+summary(data_03_groupB_ddfs_itt$fu)
+
+rmarkdown::paged_table(data_03_groupB_ddfs_itt)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_03_groupB_ddfs_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+ddfs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_03_groupB_ddfs_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Distant Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+ddfs_groupB_itt <- customize_labels(
+  ddfs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+ddfs_groupB_itt$plot <- ddfs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year DDFS rate: 96.5%
+  (95% CI: 94.3-98.8%)
+  Events: 9/267", 25), collapse = "\n"
+  )
+
+ddfs_groupB_itt$plot <- ddfs_groupB_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# idfs_groupB$table <- idfs_groupB$table + labs(x = NULL, y = NULL)
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure5_DDFS_groupB_ITT_2023-04-25.png"),
+#   ddfs_groupB_itt,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+ddfs_groupB_itt
+```
+
+# EFS RATE IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_04_groupB_efs_itt <- data_01a_groupB %>% 
+  select(
+    subject_id, cohort, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    efs, efs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = efs,
+    time = efs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_04_groupB_efs_itt$time <- data_04_groupB_efs_itt$time * 12
+  
+summary(data_04_groupB_efs_itt$fu)
+
+rmarkdown::paged_table(data_04_groupB_efs_itt)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_04_groupB_efs_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+efs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_04_groupB_efs_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Event-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+efs_groupB_itt <- customize_labels(
+  efs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+efs_groupB_itt$plot <- efs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year EFS rate: 93.9%
+  (95% CI: 91.1-96.7%)
+  Events: 17/285", 25), collapse = "\n"
+  )
+
+efs_groupB_itt$plot <- efs_groupB_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure6_EFS_groupB_ITT_2023-04-25.png"),
+#   efs_groupB_itt,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+efs_groupB_itt
+```
+
+# OS RATE IN TREATMENT GROUP B (ITT population)
+
+```{r}
+data_05_groupB_os_itt <- data_01a_groupB %>% 
+  select(
+    subject_id, cohort, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    os, os_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = os,
+    time = os_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_05_groupB_os_itt$time <- data_05_groupB_os_itt$time * 12
+  
+summary(data_05_groupB_os_itt$fu)
+
+rmarkdown::paged_table(data_05_groupB_os_itt)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_05_groupB_os_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+os_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_05_groupB_os_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Overall Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+os_groupB_itt <- customize_labels(
+  os_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+os_groupB_itt$plot <- os_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year OS rate: 98.5%
+  (95% CI: 97.1-100%)
+  Events: 4/285", 25), collapse = "\n"
+  )
+
+os_groupB_itt$plot <- os_groupB_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure7_OS_groupB_ITT_2023-04-25.png"),
+#   os_groupB_itt,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+os_groupB_itt
+```
+
+# iDFS RATE IN TREATMENT GROUP A (ITT population)
+
+```{r}
+data_06a_groupA <- data_00_listings %>% 
+  filter(
+    cohort == "Cohort A"
+  )
+
+data_06b_groupA_idfs_itt <- data_06a_groupA %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, cohort, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    i_dfs, i_dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = i_dfs,
+    time = i_dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_06b_groupA_idfs_itt$time <- data_06b_groupA_idfs_itt$time * 12
+  
+rmarkdown::paged_table(data_06b_groupA_idfs_itt)
+
+summary(data_06b_groupA_idfs_itt$fu)
+```
+
+```{r}
+summary(survfit(Surv(time, event) ~ 1, data = data_06b_groupA_idfs_itt), times = 36)
+```
+
+```{r}
+### Plot ----------------------------------------------------------------------
+idfs_groupA_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_06b_groupA_idfs_itt),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group A (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupA_itt <- customize_labels(
+  idfs_groupA_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupA_itt$plot <- idfs_groupA_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 98.3%
+  (95% CI: 95.1-100%)
+  Events: 1/63", 25), collapse = "\n"
+  )
+
+idfs_groupA_itt$plot <- idfs_groupA_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+# ggsave(
+#   here("output/PHERGain_Figure8_iDFS_groupA_ITT_2023-04-25.png"),
+#   idfs_groupA_itt,
+#   width = 24,
+#   height = 12,
+#   units = "cm",
+#   dpi = 300
+#   )
+
+### Show plot --------------------------------------------------------------
+idfs_groupA_itt
+```
