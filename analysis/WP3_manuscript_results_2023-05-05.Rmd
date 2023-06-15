@@ -1,0 +1,44 @@
+---
+title: "PHERGain | Statistical analysis for the results section of the second PHERGain manuscript"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(gtsummary)
+library(gtreg)
+
+gtsummary::theme_gtsummary_compact()
+
+here("WP3_manuscript_results_2023-05-05.Rmd")
+```
+
+# Results
+
+Patients were recruited from 45 centers in seven countries between June 26, 2017, and April 24, 2019. Of the 376 enrolled patients, 71 (18.9%) were assigned to group A and 285 (75.8%) were included in group B (Supplementary Figure 1). An additional 20 (5.3%) of 376 patients with subclinical metastatic disease by 18F-FDG-PET were assigned to an exploratory group C, whose outcome results will be described in a separate report.
+
+```{r, message = FALSE, warning = FALSE}
+data_00_listings <- read_excel(
+  here("data/MedOPP096_PHERGain_3-Year_Listings_DA_2023-04-24.xlsx"),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names()
+
+# Calculate the median and range of the variable "follow_up_time_time_from_randomization_to_last_contact_date_years"
+```
+
+As previously described, the characteristics of the patients at baseline were as expected and were well balanced between the treatment groups (Supplementary Table 1). At this second analysis (data cutoff, XXXX, 2022), the median duration of follow-up was XXX months (range, XXX to XXX).
+
+<!--
+Check the following data:
+  - Baseline characteristics remain unchanged since the first publication in Lancet Oncol
+  - Check data cutoff date (i.e., original EoS date)
+  - Check the median and range of follow-up time in months
+-->

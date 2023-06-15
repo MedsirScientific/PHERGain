@@ -13,3 +13,5 @@ This is the index page of the online repository for the PHERGain study. Here is 
 * [Statistical analysis of efficacy endpoints for ASCO 2023](WP1_esmo23-efficacy_2023-04-24.html)
 
 * [Regulatory table of safety data for ASCO 2023](WP2_esmo23-safety_2023-04-27.html)
+
+* [Statistical analysis for the results section of the second PHERGain manuscript](WP3_manuscript_results_2023-05-05.html)
