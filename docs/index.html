@@ -13,7 +13,7 @@
 
 <title>Home</title>
 
-<script src="site_libs/header-attrs-2.14/header-attrs.js"></script>
+<script src="site_libs/header-attrs-2.27/header-attrs.js"></script>
 <script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
@@ -151,11 +151,15 @@ $(document).ready(function () {
     href = "index.html";
   var menuAnchor = $('a[href="' + href + '"]');
 
-  // mark it active
-  menuAnchor.tab('show');
-
-  // if it's got a parent navbar menu mark it active as well
-  menuAnchor.closest('li.dropdown').addClass('active');
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
 
   // Navbar adjustments
   var navHeight = $(".navbar").first().height() + 15;
@@ -184,8 +188,8 @@ $(document).ready(function () {
   border-radius: 4px;
 }
 
-.tabset-dropdown > .nav-tabs > li.active:before {
-  content: "";
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
   font-family: 'Glyphicons Halflings';
   display: inline-block;
   padding: 10px;
@@ -193,16 +197,9 @@ $(document).ready(function () {
 }
 
 .tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
-  content: "&#xe258;";
-  border: none;
-}
-
-.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
-  content: "";
+  content: "\e258";
   font-family: 'Glyphicons Halflings';
-  display: inline-block;
-  padding: 10px;
-  border-right: 1px solid #ddd;
+  border: none;
 }
 
 .tabset-dropdown > .nav-tabs > li.active {
@@ -305,7 +302,7 @@ class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2023-06-15
+<strong>Last updated:</strong> 2024-09-23
 </p>
 <p>
 <strong>Checks:</strong> <span
@@ -323,7 +320,7 @@ title="This is the local directory in which the code in this file was executed."
 This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a>
 analysis was created with <a
   href="https://github.com/workflowr/workflowr">workflowr</a> (version
-1.7.0). The <em>Checks</em> tab describes the reproducibility checks
+1.7.1). The <em>Checks</em> tab describes the reproducibility checks
 that were applied when the results were created. The <em>Past
 versions</em> tab lists the development history.
 </p>
@@ -352,15 +349,15 @@ results.</p>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreeac18461fca14700cba1567d4d132b8f8a81573fdtargetblankac18461a">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree7c6b0c3f0c97e08014fc46ac705e9dfd536cfb88targetblank7c6b0c3a">
 <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span> <strong>Repository version:</strong>
-<a href="https://github.com/MedsirScientific/PHERGain/tree/ac18461fca14700cba1567d4d132b8f8a81573fd" target="_blank">ac18461</a>
+<a href="https://github.com/MedsirScientific/PHERGain/tree/7c6b0c3f0c97e08014fc46ac705e9dfd536cfb88" target="_blank">7c6b0c3</a>
 </a>
 </p>
 </div>
 <div
-id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreeac18461fca14700cba1567d4d132b8f8a81573fdtargetblankac18461a"
+id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree7c6b0c3f0c97e08014fc46ac705e9dfd536cfb88targetblank7c6b0c3a"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -370,7 +367,7 @@ reproducibility.
 </p>
 <p>
 The results in this page were generated with repository version
-<a href="https://github.com/MedsirScientific/PHERGain/tree/ac18461fca14700cba1567d4d132b8f8a81573fd" target="_blank">ac18461</a>.
+<a href="https://github.com/MedsirScientific/PHERGain/tree/7c6b0c3f0c97e08014fc46ac705e9dfd536cfb88" target="_blank">7c6b0c3</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -389,34 +386,43 @@ Ignored files:
     Ignored:    .Rhistory
     Ignored:    .Rproj.user/
     Ignored:    analysis/.DS_Store
+    Ignored:    data/.DS_Store
+    Ignored:    data/2023-09-04/
+    Ignored:    data/2024-09-04/
+    Ignored:    data/MEDOPP096 Global Status 2023.xlsx
     Ignored:    data/MedOPP096 PHERGain 3-Year Listings Draft 2023-05-12.xlsx
-    Ignored:    data/MedOPP096_PHERGain_3-Year_Listings_DA_2023-04-24.xlsx
+    Ignored:    data/PHERGAIN_End of Study_2024_09_19.xlsx
+    Ignored:    data/PHERGAIN_FU Events_2024_09_10.xlsx
+    Ignored:    data/PHERGAIN_Follow-Up_2024_09_10.xlsx
+    Ignored:    data/PHERGAIN_Informed Consent_2024_09_18.xlsx
+    Ignored:    data/PHERGain_HER2DX.xlsx
     Ignored:    data/PHERGain_data-management_2023-04-24.xlsx
+    Ignored:    data/PHERGain_sample-IDs_2024-09-04.xlsx
     Ignored:    output/.DS_Store
 
 Untracked files:
-    Untracked:  analysis/PHERGain_TEMP_groupBprime_DFS_2023-06-09.xlsx
-    Untracked:  output/PHERGain_Figure1_iDFS_groupB_ITT_2023-04-27.png
-    Untracked:  output/PHERGain_Figure1_iDFS_groupB_ITT_2023-05-04.png
-    Untracked:  output/PHERGain_Figure1_iDFS_groupB_ITT_2023-05-26.png
-    Untracked:  output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-04-27.png
-    Untracked:  output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-05-04.png
-    Untracked:  output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-05-05.png
-    Untracked:  output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-05-26.png
-    Untracked:  output/PHERGain_Figure3_iDFS_groupB_PP_2023-04-27.png
-    Untracked:  output/PHERGain_Figure4_iDFS_groupB_ITT_by-HR_2023-04-27.png
-    Untracked:  output/PHERGain_Figure5_DDFS_groupB_ITT_2023-04-27.png
-    Untracked:  output/PHERGain_Figure6_EFS_groupB_ITT_2023-04-27.png
-    Untracked:  output/PHERGain_Figure7_OS_groupB_ITT_2023-04-27.png
-    Untracked:  output/PHERGain_Table1_TEAEs_v.1.0_2023-04-27.docx
-    Untracked:  output/PHERGain_Table2_TEAEs_G≥3_v.1.0_2023-04-27.docx
-    Untracked:  output/PHERGain_Table3_TEAEs_10%_v.1.0_2023-04-27.docx
-    Untracked:  output/PHERGain_groupB'_teaes-by-soc_2023-04-27.docx
-    Untracked:  output/PHERGain_groupB'_teaes_2023-04-27.docx
-    Untracked:  output/PHERGain_groupB_teaes-by-soc_2023-04-27.docx
-    Untracked:  output/PHERGain_groupB_teaes_2023-04-27.docx
-    Untracked:  output/PHERGain_teaes_table_2023-05-05.docx
-    Untracked:  output/PHERGain_teaes_table_groupB'_2023-05-05.docx
+    Untracked:  analysis/WP4_sample-IDs.Rmd
+    Untracked:  analysis/WP5_MRI_pCR_manuscript.Rmd
+    Untracked:  analysis/WP6_5y_fu_tracker.Rmd
+    Untracked:  output/figures/
+    Untracked:  output/listings/
+    Untracked:  output/tables/
+
+Unstaged changes:
+    Deleted:    analysis/PHERGain_aes-by-soc_table_2023-03-26.docx
+    Deleted:    analysis/WP1_esmo23-efficacy.Rmd
+    Deleted:    analysis/WP1_esmo23-efficacy_2023-04-24.Rmd
+    Deleted:    output/PHERGain_Figure1_iDFS_groupB_ITT_2023-04-25.png
+    Deleted:    output/PHERGain_Figure1_iDFS_groupB_ITT_annotated_2023-04-25.png
+    Deleted:    output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-04-25.png
+    Deleted:    output/PHERGain_Figure3_iDFS_groupB_PP_2023-04-25.png
+    Deleted:    output/PHERGain_Figure4_iDFS_groupB_ITT_by-HR_2023-04-25.png
+    Deleted:    output/PHERGain_Figure5_DDFS_groupB_ITT_2023-04-25.png
+    Deleted:    output/PHERGain_Figure6_EFS_groupB_ITT_2023-04-25.png
+    Deleted:    output/PHERGain_Figure7_OS_groupB_ITT_2023-04-25.png
+    Deleted:    output/PHERGain_Figure8_iDFS_groupA_ITT_2023-04-25.png
+    Deleted:    output/PHERGain_Figure8_iDFS_groupA_ITT_annotated_2023-04-25.png
+    Deleted:    output/PHERGain_teaes_table_2023-05-04.docx
 
 </code></pre>
 <p>
@@ -461,6 +467,40 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/MedsirScientific/PHERGain/blob/7c6b0c3f0c97e08014fc46ac705e9dfd536cfb88/analysis/index.Rmd" target="_blank">7c6b0c3</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-09-23
+</td>
+<td>
+Update index page to reflect changes in WP1
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/MedsirScientific/PHERGain/d69eb8ad8f75cc296376e8c9a9ba11c90c4f61d7/docs/index.html" target="_blank">d69eb8a</a>
+</td>
+<td>
+MedsirScientific
+</td>
+<td>
+2023-06-15
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -590,8 +630,8 @@ Start workflowr project.
 <p>This is the index page of the online repository for the PHERGain
 study. Here is a list of work packages:</p>
 <ul>
-<li><p><a href="WP1_esmo23-efficacy_2023-04-24.html">Statistical
-analysis of efficacy endpoints for ASCO 2023</a></p></li>
+<li><p><a href="WP1_asco23-efficacy.html">Statistical analysis of
+efficacy endpoints for ASCO 2023</a></p></li>
 <li><p><a href="WP2_esmo23-safety_2023-04-27.html">Regulatory table of
 safety data for ASCO 2023</a></p></li>
 <li><p><a href="WP3_manuscript_results_2023-05-05.html">Statistical
