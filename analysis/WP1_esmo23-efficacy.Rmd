@@ -1,0 +1,2390 @@
+---
+title: "PHERGain | Statistical Analysis of Efficacy Endpoints for ESMO 2023"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(survival)
+library(survminer)
+library(survMisc)
+library(tidyverse)
+library(ggsurvfit)
+library(gtsummary)
+
+here("WP1_esmo23-efficacy.Rmd")
+project_id <- "PHERGain"
+cutoff_date <- as.Date("2023-09-04")
+listings_date <- as.Date("2023-05-12")
+
+customize_labels <- function (p, font.title = NULL,
+                              font.subtitle = NULL, font.caption = NULL,
+                              font.x = NULL, font.y = NULL, font.xtickslab = NULL, font.ytickslab = NULL)
+{
+  original.p <- p
+  if(is.ggplot(original.p)) list.plots <- list(original.p)
+  else if(is.list(original.p)) list.plots <- original.p
+  else stop("Can't handle an object of class ", class (original.p))
+  .set_font <- function(font){
+    font <- ggpubr:::.parse_font(font)
+    ggtext::element_markdown (size = font$size, face = font$face, colour = font$color)
+  }
+  for(i in 1:length(list.plots)){
+    p <- list.plots[[i]]
+    if(is.ggplot(p)){
+      if (!is.null(font.title)) p <- p + theme(plot.title = .set_font(font.title))
+      if (!is.null(font.subtitle)) p <- p + theme(plot.subtitle = .set_font(font.subtitle))
+      if (!is.null(font.caption)) p <- p + theme(plot.caption = .set_font(font.caption))
+      if (!is.null(font.x)) p <- p + theme(axis.title.x = .set_font(font.x))
+      if (!is.null(font.y)) p <- p + theme(axis.title.y = .set_font(font.y))
+      if (!is.null(font.xtickslab)) p <- p + theme(axis.text.x = .set_font(font.xtickslab))
+      if (!is.null(font.ytickslab)) p <- p + theme(axis.text.y = .set_font(font.ytickslab))
+      list.plots[[i]] <- p
+    }
+  }
+  if(is.ggplot(original.p)) list.plots[[1]]
+  else list.plots
+}
+```
+
+The data cutoff date for these analyses is: `r cutoff_date`
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Reformat the data cutoff date for reading of files
+cutoff_date_formatted <- format(cutoff_date, "%Y_%m_%d")
+```
+
+This report presents the time-to-event primary and secondary efficacy endpoints of the PHERGain study that will be showcased in an oral presentation at ESMO 2023.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_00_listings <- read_excel(
+  here(paste0("data/", "MedOPP096 ", project_id, " 3-Year Listings Draft ", listings_date, ".xlsx")),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names()
+
+rmarkdown::paged_table(data_00_listings)
+```
+
+# 1. TREATMENT GROUP B (ITT population)
+## 1.1 Invasive Disease-Free Survival (iDFS) analysis
+### 1.1.1 iDFS rate in group B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_01a_groupB <- data_00_listings %>% 
+  filter(
+    group == "Group B"
+  )
+
+data_01b_groupB_idfs_itt <- data_01a_groupB %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, nodal_status, ihc, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    i_dfs, i_dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = i_dfs,
+    time = i_dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_01b_groupB_idfs_itt$time <- data_01b_groupB_idfs_itt$time * 12
+  
+# summary(data_01b_groupB_idfs_itt$fu)
+
+rmarkdown::paged_table(data_01b_groupB_idfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate"
+  ) %>% 
+  modify_header(label = "")
+
+# To show detailed information on each event use the following:
+# summary(survfit(Surv(time, event) ~ 1, data = data_01b_groupB_idfs_itt, conf.type = "log-log"))
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r idfs_groupB_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_01b_groupB_idfs_itt, conf.type = "log-log"),
+  xlab = "\nMonths since surgery", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.fill = "#123467", 
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 6,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.25,
+  risk.table = TRUE,
+  risk.table.title = "Number at risk",
+  risk.table.y.text = TRUE,
+  risk.table.height = 0.2,
+  fontsize = 4,
+  ggtheme = theme_classic(),
+  palette = "#123467",
+  legend.labs = " ",
+  legend.title = ""
+) 
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt <- customize_labels(
+  idfs_groupB_itt,
+  font.title     = c(10, "bold",  "#0a0908"),
+  font.caption   = c(10, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(12, "plain", "#0a0908"),
+  font.ytickslab = c(12, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_itt$plot <- idfs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 95.4%
+  (95% CI: 92.0-97.3%)
+  Exact binomial p<0·001", 25), collapse = "\n"
+  )
+
+caption2 <- paste(strwrap(
+  "Treatment group B meets the second co-primary endpoint with ≤ 15 patients
+  with iDFS events (p < 0.001)", 55), collapse = "\n"
+  )
+
+caption3 <- paste(strwrap(
+  "Exact binomial p<0·001", 55), collapse = "\n"
+  )
+
+# idfs_groupB_itt$plot <- idfs_groupB_itt$plot + annotate(
+#   "text", x = 16, y = 0.60,
+#   label = caption1,
+#   cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+#   )
+ 
+# idfs_groupB_itt$plot <- idfs_groupB_itt$plot + annotate(
+#   "text", x = 16, y = 0.30,
+#   label = caption2,
+#   cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+#   )
+
+idfs_groupB_itt$plot <- idfs_groupB_itt$plot + annotate(
+  "text", x = 1, y = 0.14,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "left", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure1_iDFS_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  idfs_groupB_itt,
+  width = 20,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+  
+### Show plot --------------------------------------------------------------
+idfs_groupB_itt
+```
+
+### 1.1.2 iDFS rate in PET-responders who achieved a pCR
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_01c_groupB_idfs_pet_pcr <- data_01b_groupB_idfs_itt %>% 
+  filter(
+    pet_response == "Responder",
+    pcr == "Yes"
+  )
+
+# summary(data_01c_groupB_idfs_pet_pcr$fu)
+
+rmarkdown::paged_table(data_01c_groupB_idfs_pet_pcr)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_01c_groupB_idfs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate in PET responders with a pCR"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_01c_groupB_idfs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate in PET responders with a pCR stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r idfs_groupB_idfs_pet_pcr, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_01c_groupB_idfs_pet_pcr, conf.type = "log-log"),
+  xlab = "\nMonths since surgery", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.fill = "#123467", 
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 6,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.25,
+  risk.table = TRUE,
+  risk.table.title = "Number at risk",
+  risk.table.y.text = TRUE,
+  risk.table.height = 0.2,
+  fontsize = 4,
+  ggtheme = theme_classic(),
+  palette = "#123467",
+  legend.labs = " ",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr <- customize_labels(
+  idfs_groupB_idfs_pet_pcr,
+  font.title     = c(10, "bold",  "#0a0908"),
+  font.caption   = c(10, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(12, "plain", "#0a0908"),
+  font.ytickslab = c(12, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 98.8%
+  (95% CI: 91.5-99.8%)
+  Events: 1/86", 25), collapse = "\n"
+  )
+
+caption2 <- paste(strwrap(
+  "(Regional recurrence)", 45), collapse = "\n"
+  )
+
+caption3 <- paste(strwrap(
+  "3-year iDFS rate: 98.8%
+  (95% CI: 96.3-100%)", 25), collapse = "\n"
+  )
+
+# idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + annotate(
+#   "text", x = 15, y = 0.50,
+#   label = caption1,
+#   cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+#   )
+
+# idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + annotate(
+#   "text", x = 15, y = 0.345,
+#   label = caption2,
+#   cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+#   )
+
+idfs_groupB_idfs_pet_pcr$plot <- idfs_groupB_idfs_pet_pcr$plot + annotate(
+  "text", x = 1, y = 0.10,
+  label = caption3,
+  cex = 3, vjust = "center", hjust = "left", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure2_iDFS_groupB_ITT_PET-responders-pCR_", as.Date(Sys.Date()), ".png")),
+  idfs_groupB_idfs_pet_pcr,
+  width = 20,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_idfs_pet_pcr
+```
+
+### 1.1.3 iDFS rate (PP population)
+#### Data preprocessing
+  
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_02a_monitoring <- read_excel(
+  here(paste0("data/", project_id, "_data-management_", "2023-04-24", ".xlsx")),
+    sheet = "PHERGain PP exclusions"
+  ) %>% 
+  clean_names() %>% 
+  filter(
+    group == "B",
+    reason_for_exclusion_from_pp_population != "T-DM1 (post iDFS event; NO exclusion)"
+  ) %>% 
+  rename(
+    participant = patient
+  ) %>% 
+  select(participant)
+
+data_02b_groupB_idfs_pp <- anti_join(
+  data_01b_groupB_idfs_itt,
+  data_02a_monitoring,
+  by = "participant"
+)
+
+# summary(data_02b_groupB_idfs_pp$fu)
+
+rmarkdown::paged_table(data_02b_groupB_idfs_pp)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_02b_groupB_idfs_pp),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate in the Per Protocol population"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_02b_groupB_idfs_pp),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by hormone receptor status in the Per Protocol population"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r idfs_groupB_pp, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_pp <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_02b_groupB_idfs_pp, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = FALSE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (PP)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt <- customize_labels(
+  idfs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_pp$plot <- idfs_groupB_pp$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 95.2%
+  (95% CI: 91.6-97.3%)
+  Events: 11/236", 25), collapse = "\n"
+  )
+
+idfs_groupB_pp$plot <- idfs_groupB_pp$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure3_iDFS_groupB_PP_", as.Date(Sys.Date()), ".png")),
+  idfs_groupB_pp,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_pp
+```
+
+### 1.1.4 iDFS rate by hormone receptor status
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_01b_groupB_idfs_itt$hormone_receptor_status <- factor(
+  data_01b_groupB_idfs_itt$hormone_receptor_status,
+  levels = c("Positive", "Negative")
+  )
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ hormone_receptor_status, data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Kaplan-Meier plot
+
+```{r idfs_groupB_itt_hr, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+idfs_groupB_itt_hr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ hormone_receptor_status, data = data_01b_groupB_idfs_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-free survival",
+  pval = TRUE,
+  pval.size = 3.,
+  pval.coord = c(14, 0.15),
+  conf.int = FALSE,
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = TRUE,
+  risk.table.height = 0.3,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = alpha(c("#009FB7", "#2A3030"), c(1.0, 0.65)),
+  legend.labs = c("HR+", "HR-")
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt <- customize_labels(
+  idfs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+  
+caption1 <- paste(strwrap(
+  "3-year iDFS rate in HR+ patients: 94.9%
+  (95% CI: 90.5-97.3%)
+  Events: 9/183", 40),
+  collapse = "\n"
+  )
+
+caption2 <- paste(strwrap(
+  "3-year iDFS rate in HR- patients: 96.4%
+  (95% CI: 89.3-98.8%)
+  Events: 3/84", 40), collapse = "\n"
+  )
+
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + annotate(
+  "text", x = 16, y = 0.60,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+idfs_groupB_itt_hr$plot <- idfs_groupB_itt_hr$plot + annotate(
+  "text", x = 16, y = 0.30,
+  label = caption2,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot --------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure4_iDFS_groupB_ITT_by-HR_", as.Date(Sys.Date()), ".png")),
+  idfs_groupB_itt_hr,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+idfs_groupB_itt_hr
+```
+
+### 1.1.5 iDFS rate by nodal status
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ nodal_status, data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by nodal status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ nodal_status + strata(hormone_receptor_status), data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by nodal status stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+### 1.1.6 iDFS rate by HER2 status
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ ihc + 1, data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by HER2 IHC result"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ ihc + strata(hormone_receptor_status), data = data_01b_groupB_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by HER2 IHC result stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+## 1.2 Disease-Free Survival (DFS) analysis
+### 1.2.1 DFS rate in group B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_03a_groupB_dfs_itt <- data_01a_groupB %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    dfs, dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = dfs,
+    time = dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_03a_groupB_dfs_itt$time <- as.numeric(data_03a_groupB_dfs_itt$time * 12)
+  
+# summary(data_03a_groupB_dfs_itt$fu)
+
+rmarkdown::paged_table(data_03a_groupB_dfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_03a_groupB_dfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_03a_groupB_dfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+### 1.2.2 DFS rate in PET-responders who achieved a pCR
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp <- data_01c_groupB_idfs_pet_pcr %>% 
+  select("participant") %>% 
+  rename(subject_id = participant)
+
+data_temp <- merge(
+  data_temp,
+  data_00_listings,
+  by = "subject_id",
+  all = FALSE
+  )
+
+# write_xlsx(data_temp, "PHERGain_TEMP_groupBprime_DFS_2023-06-09.xlsx")
+
+data_temp <- data_temp %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    dfs, dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = dfs,
+    time = dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_temp$time <- as.numeric(data_temp$time * 12)
+  
+# summary(data_temp$fu)
+
+rmarkdown::paged_table(data_temp)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_temp),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate in PET responders with a pCR"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_temp),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate in PET responders with a pCR stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+## 1.3 Distant Disease-Free Survival (DDFS) analysis
+### 1.3.1 DDFS rate in group B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_03_groupB_ddfs_itt <- data_01a_groupB %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    ddfs, ddfs_time_years, eo_s_distant_recurrence, eos_date_of_distant_recurrence,
+    follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    distant_recurrence = eo_s_distant_recurrence,
+    distant_recurrence_date = eos_date_of_distant_recurrence,
+    event = ddfs,
+    time = ddfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_03_groupB_ddfs_itt$time <- data_03_groupB_ddfs_itt$time * 12
+  
+# summary(data_03_groupB_ddfs_itt$fu)
+
+rmarkdown::paged_table(data_03_groupB_ddfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_03_groupB_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_03_groupB_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r ddfs_groupB_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+ddfs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_03_groupB_ddfs_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Distant Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = TRUE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#0a0908",
+  legend.labs = " ",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupB_itt <- customize_labels(
+  idfs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+ddfs_groupB_itt$plot <- ddfs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year DDFS rate: 96.5%
+  (95% CI: 93.5-98.2%)
+  Events: 9/267", 25), collapse = "\n"
+  )
+
+ddfs_groupB_itt$plot <- ddfs_groupB_itt$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure5_DDFS_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  ddfs_groupB_itt,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+ddfs_groupB_itt
+```
+
+### 1.3.2 DDFS rate in PET-responders who achieved a pCR
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_03b_groupB_ddfs_pet_pcr <- data_01c_groupB_idfs_pet_pcr %>% 
+  select(participant)
+
+data_03b_groupB_ddfs_pet_pcr <- merge(
+  data_03b_groupB_ddfs_pet_pcr,
+  data_03_groupB_ddfs_itt,
+  by = "participant",
+  all = FALSE
+)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_03b_groupB_ddfs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate in PET responders with a pCR"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_03b_groupB_ddfs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate in PET responders with a pCR stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r ddfs_groupB_pet_pcr, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+ddfs_groupB_pet_pcr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_03b_groupB_ddfs_pet_pcr, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Distant Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = TRUE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#0a0908",
+  legend.labs = " ",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+ddfs_groupB_pet_pcr <- customize_labels(
+  ddfs_groupB_pet_pcr,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+ddfs_groupB_pet_pcr$plot <- ddfs_groupB_pet_pcr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year DDFS rate: 96.5%
+  (95% CI: 94.3-98.8%)
+  Events: 9/267", 25), collapse = "\n"
+  )
+
+ddfs_groupB_pet_pcr$plot <- ddfs_groupB_pet_pcr$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure6_DDFS_PET-responders_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  ddfs_groupB_pet_pcr,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+ddfs_groupB_pet_pcr
+```
+
+## 1.4 Event-Free Survival (EFS) analysis
+### 1.4.1 EFS rate in group B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_04_groupB_efs_itt <- data_01a_groupB %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    efs, efs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = efs,
+    time = efs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_04_groupB_efs_itt$time <- data_04_groupB_efs_itt$time * 12
+  
+# summary(data_04_groupB_efs_itt$fu)
+
+rmarkdown::paged_table(data_04_groupB_efs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_04_groupB_efs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_04_groupB_efs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r efs_groupB_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+efs_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_04_groupB_efs_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Event-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = FALSE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+efs_groupB_itt <- customize_labels(
+  efs_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+efs_groupB_itt$plot <- efs_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year EFS rate: 93.9%
+  (95% CI: 91.1-96.7%)
+  Events: 17/285", 25), collapse = "\n"
+  )
+
+efs_groupB_itt$plot <- efs_groupB_itt$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure7_EFS_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  efs_groupB_itt,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+efs_groupB_itt
+```
+
+### 1.4.2 EFS rate in PET-responders who achieved a pCR
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_04b_groupB_efs_pet_pcr <- data_01c_groupB_idfs_pet_pcr %>% 
+  select(participant)
+
+data_04b_groupB_efs_pet_pcr <- merge(
+  data_04b_groupB_efs_pet_pcr,
+  data_04_groupB_efs_itt,
+  by = "participant",
+  all = FALSE
+)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_04b_groupB_efs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate in PET responders with a pCR"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_04b_groupB_efs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate in PET responders with a pCR stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r efs_groupB_pet_pcr, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+efs_groupB_pet_pcr <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_04b_groupB_efs_pet_pcr, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Event-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = FALSE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+efs_groupB_pet_pcr <- customize_labels(
+  efs_groupB_pet_pcr,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+efs_groupB_pet_pcr$plot <- efs_groupB_pet_pcr$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year EFS rate: 93.9%
+  (95% CI: 91.1-96.7%)
+  Events: 17/285", 25), collapse = "\n"
+  )
+
+efs_groupB_pet_pcr$plot <- efs_groupB_pet_pcr$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure8_EFS_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  efs_groupB_pet_pcr,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+efs_groupB_pet_pcr
+```
+
+## 1.5 Overall Survival (OS) analysis
+### 1.5.1 OS rate in group B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_05_groupB_os_itt <- data_01a_groupB %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    os, os_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = os,
+    time = os_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_05_groupB_os_itt$time <- data_05_groupB_os_itt$time * 12
+  
+# summary(data_05_groupB_os_itt$fu)
+
+rmarkdown::paged_table(data_05_groupB_os_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_05_groupB_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_05_groupB_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r os_groupB_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+os_groupB_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_05_groupB_os_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Overall Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = FALSE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group B (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+os_groupB_itt <- customize_labels(
+  os_groupB_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+os_groupB_itt$plot <- os_groupB_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year OS rate: 98.5%
+  (95% CI: 96.1-99.4%)
+  Events: 4/285", 25), collapse = "\n"
+  )
+
+os_groupB_itt$plot <- os_groupB_itt$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure9_OS_groupB_ITT_", as.Date(Sys.Date()), ".png")),
+  os_groupB_itt,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+os_groupB_itt
+```
+
+### 1.5.2 OS rate in PET-responders who achieved a pCR
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_05b_groupB_efs_pet_pcr <- data_01c_groupB_idfs_pet_pcr %>% 
+  select(participant)
+
+data_05b_groupB_efs_pet_pcr <- merge(
+  data_05b_groupB_efs_pet_pcr,
+  data_05_groupB_os_itt,
+  by = "participant",
+  all = FALSE
+)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_05b_groupB_efs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate in PET responders with a pCR"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_05b_groupB_efs_pet_pcr),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate in PET responders with a pCR stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+# 2. TREATMENT GROUP A (ITT population)
+## 2.1 Invasive Disease-Free Survival (iDFS) analysis
+### 2.1.1 iDFS rate in group A
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_06a_groupA <- data_00_listings %>% 
+  filter(
+    group == "Group A"
+  )
+
+data_06b_groupA_idfs_itt <- data_06a_groupA %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    i_dfs, i_dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = i_dfs,
+    time = i_dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_06b_groupA_idfs_itt$time <- data_06b_groupA_idfs_itt$time * 12
+
+# Show summary statistics for the follow-up time  
+# summary(data_06b_groupA_idfs_itt$fu)
+
+rmarkdown::paged_table(data_06b_groupA_idfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_06b_groupA_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate in group A"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_06b_groupA_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate in group A stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r idfs_groupA_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+idfs_groupA_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_06b_groupA_idfs_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Invasive Disease-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = FALSE,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group A (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+idfs_groupA_itt <- customize_labels(
+  idfs_groupA_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(14, "bold",  "#0a0908"),          
+  font.y         = c(14, "bold",  "#0a0908"),      
+  font.xtickslab = c(10, "plain", "#0a0908"),
+  font.ytickslab = c(10, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+idfs_groupA_itt$plot <- idfs_groupA_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year iDFS rate: 98.3%
+  (95% CI: 88.8-99.8%)
+  Events: 1/63", 25), collapse = "\n"
+  )
+
+idfs_groupA_itt$plot <- idfs_groupA_itt$plot + annotate(
+  "text", x = 12, y = 0.40,
+  label = caption1,
+  cex = 3, vjust = "center", hjust = "center", fontface = 20
+  )
+
+# ### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure10_iDFS_groupA_ITT_", as.Date(Sys.Date()), ".png")),
+  idfs_groupA_itt,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+idfs_groupA_itt
+```
+
+## 2.2 Disease-Free Survival (DFS) analysis
+### 2.2.1 DFS rate in group A
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+## 2.3 Distant Disease-Free Survival (DDFS) analysis
+### 2.3.1 DDFS rate in group A
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_07_groupA_ddfs_itt <- data_06a_groupA %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    ddfs, ddfs_time_years, eo_s_distant_recurrence, eos_date_of_distant_recurrence,
+    follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    distant_recurrence = eo_s_distant_recurrence,
+    distant_recurrence_date = eos_date_of_distant_recurrence,
+    event = ddfs,
+    time = ddfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_07_groupA_ddfs_itt$time <- data_07_groupA_ddfs_itt$time * 12
+  
+# summary(data_07_groupA_ddfs_itt$fu)
+
+rmarkdown::paged_table(data_07_groupA_ddfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_07_groupA_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate in group A"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_07_groupA_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate in group A stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+## 2.4 Event-Free Survival (EFS) analysis
+### 2.4.1 EFS rate in group A
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_08_groupA_efs_itt <- data_06a_groupA %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    efs, efs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = efs,
+    time = efs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_08_groupA_efs_itt$time <- data_08_groupA_efs_itt$time * 12
+  
+# summary(data_08_groupA_efs_itt$fu)
+
+rmarkdown::paged_table(data_08_groupA_efs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_08_groupA_efs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate in group A"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_08_groupA_efs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate in group A stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r efs_groupA_itt, message = FALSE, warning = FALSE, echo = FALSE}
+### Plot ----------------------------------------------------------------------
+efs_groupA_itt <- ggsurvplot(
+  fit = survfit(Surv(time, event) ~ 1, data = data_08_groupA_efs_itt, conf.type = "log-log"),
+  xlab = "Time since surgery (months)", 
+  ylab = "Event-Free Survival",
+  conf.int = TRUE,
+  conf.int.alpha = c(0.15),
+  xlim = c(0,48.9),
+  ylim = c(0,1.009),
+  censor.size = 3.5,
+  size = 1,
+  break.time.by = 3,
+  axes.offset = FALSE,
+  surv.scale = "percent",
+  break.y.by = 0.20,
+  risk.table = TRUE,
+  risk.table.title = NULL,
+  risk.table.y.text = FALSE,
+  risk.table.height = 0.2,
+  fontsize = 3,
+  ggtheme = theme_classic(),
+  palette = "#000000",
+  legend.labs = "Group A (ITT)",
+  legend.title = ""
+)
+
+### Modify theme --------------------------------------------------------------
+efs_groupA_itt <- customize_labels(
+  efs_groupA_itt,
+  font.title     = c(14, "bold",  "#0a0908"),
+  font.caption   = c(12, "plain", "#0a0908"),
+  font.x         = c(12, "bold",  "#0a0908"),          
+  font.y         = c(12, "bold",  "#0a0908"),      
+  font.xtickslab = c(8, "plain", "#0a0908"),
+  font.ytickslab = c(8, "plain", "#0a0908")
+)
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+### Add vertical dash line ----------------------------------------------------
+efs_groupA_itt$plot <- efs_groupA_itt$plot + geom_vline(
+  xintercept = 36, linetype = "longdash"
+  )
+
+caption1 <- paste(strwrap(
+  "3-year EFS rate: 98.4%
+  (95% CI: 89.1-99-8%)
+  Events: 1/71", 25), collapse = "\n"
+  )
+
+efs_groupA_itt$plot <- efs_groupA_itt$plot + annotate(
+  "text", x = 15, y = 0.50,
+  label = caption1,
+  cex = 3.5, vjust = "center", hjust = "center", fontface = 20
+  )
+
+### Save plot ---------------------------------------------------------------
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_Figure11_EFS_groupA_ITT_", as.Date(Sys.Date()), ".png")),
+  efs_groupB_itt,
+  width = 24,
+  height = 12,
+  units = "cm",
+  dpi = 300
+  )
+
+### Show plot --------------------------------------------------------------
+efs_groupA_itt
+```
+
+## 2.5 Overall Survival (OS) analysis
+### 2.5.1 OS rate in group A
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_09_groupA_os_itt <- data_06a_groupA %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    os, os_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = os,
+    time = os_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_09_groupA_os_itt$time <- data_09_groupA_os_itt$time * 12
+  
+# summary(data_09_groupA_os_itt$fu)
+
+rmarkdown::paged_table(data_09_groupA_os_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1, data = data_09_groupA_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate in group A"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ 1 + strata(hormone_receptor_status), data = data_09_groupA_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate in group A stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Kaplan-Meier plot
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+
+```
+
+# 3. Statistical contrasts by group
+
+## 3.1 Invasive Disease-Free Survival (iDFS) analysis
+### 3.1.1 iDFS rate in groups A vs B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_10a_group <- data_00_listings %>% 
+  filter(
+    group != "Group C"
+  )
+
+data_10b_group_idfs_itt <- data_10a_group %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    i_dfs, i_dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = i_dfs,
+    time = i_dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_10b_group_idfs_itt$time <- data_10b_group_idfs_itt$time * 12
+  
+# summary(data_10b_group_idfs_itt$fu)
+
+rmarkdown::paged_table(data_10b_group_idfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group, data = data_10b_group_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by group"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_idfs <- survdiff(Surv(time, event) ~ group, data = data_10b_group_idfs_itt)
+logrank_idfs[6]
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_10b_group_idfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year iDFS rate by group stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# logrank_idfs <- survdiff(Surv(time, event) ~ group + hormone_receptor_status, data = data_10b_group_idfs_itt)
+# logrank_idfs
+
+fit <- coxph(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_10b_group_idfs_itt)
+fit
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+ph_test <- cox.zph(fit) 
+print(ph_test)                  # display the results 
+ggcoxzph(ph_test)               # plot curves 
+```
+
+## 3.2 Disease-Free Survival (DFS) analysis
+### 3.2.1 DFS rate in groups A vs. B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_11b_group_dfs_itt <- data_10a_group %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    dfs, dfs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = dfs,
+    time = dfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_11b_group_dfs_itt$time <- data_11b_group_dfs_itt$time * 12
+  
+# summary(data_11b_group_dfs_itt$fu)
+
+rmarkdown::paged_table(data_11b_group_dfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group, data = data_11b_group_dfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate by group"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_idfs <- survdiff(Surv(time, event) ~ group, data = data_11b_group_dfs_itt)
+logrank_idfs[6]
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_11b_group_dfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DFS rate by group stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# logrank_idfs <- survdiff(Surv(time, event) ~ group + hormone_receptor_status, data = data_11b_group_dfs_itt)
+# logrank_idfs
+
+fit <- coxph(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_11b_group_dfs_itt)
+fit
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+ph_test <- cox.zph(fit) 
+print(ph_test)                  # display the results 
+ggcoxzph(ph_test)               # plot curves 
+```
+
+## 3.3 Distant Disease-Free Survival (DDFS) analysis
+### 3.3.1 DDFS rate in groups A vs B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_12_group_ddfs_itt <- data_10a_group %>% 
+  filter(
+    discontinuation_study_treatment_before_surgery == "No",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    ddfs, ddfs_time_years, eo_s_distant_recurrence, eos_date_of_distant_recurrence,
+    follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    distant_recurrence = eo_s_distant_recurrence,
+    distant_recurrence_date = eos_date_of_distant_recurrence,
+    event = ddfs,
+    time = ddfs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_12_group_ddfs_itt$time <- data_12_group_ddfs_itt$time * 12
+  
+# summary(data_12_group_ddfs_itt$fu)
+
+rmarkdown::paged_table(data_12_group_ddfs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group, data = data_12_group_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate by group"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_ddfs <- survdiff(Surv(time, event) ~ group, data = data_12_group_ddfs_itt)
+logrank_ddfs[6]
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_12_group_ddfs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year DDFS rate by group stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_idfs <- survdiff(Surv(time, event) ~ group + hormone_receptor_status, data = data_12_group_ddfs_itt)
+logrank_idfs[6]
+```
+
+## 3.4 Event-Free Survival (EFS) analysis
+### 3.4.1 EFS rate in groups A vs B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_13_group_efs_itt <- data_10a_group %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    efs, efs_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = efs,
+    time = efs_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_13_group_efs_itt$time <- data_13_group_efs_itt$time * 12
+  
+# summary(data_13_group_efs_itt$fu)
+
+rmarkdown::paged_table(data_13_group_efs_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group, data = data_13_group_efs_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year EFS rate by group"
+  ) %>% 
+  modify_header(label = "")
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_efs <- survdiff(Surv(time, event) ~ group, data = data_13_group_efs_itt)
+logrank_efs[6]
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+summary(coxph(Surv(time, event) ~ group + strata(hormone_receptor_status), data = data_13_group_efs_itt, ties = "breslow"))
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_efs <- survdiff(Surv(time, event) ~ group + hormone_receptor_status, data = data_13_group_efs_itt)
+logrank_idfs[6]
+```
+
+## 3.5 Overall Survival (OS) analysis
+### 3.5.1 OS rate in groups A vs B
+#### Data preprocessing
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_14_group_os_itt <- data_10a_group %>% 
+  select(
+    subject_id, group, hormone_receptor_status, pet_response_conclusion, p_cr_yp_t0_is_n0,
+    os, os_time_years, follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  rename(
+    participant = subject_id,
+    pet_response = pet_response_conclusion,
+    pcr = p_cr_yp_t0_is_n0,
+    event = os,
+    time = os_time_years,
+    fu = follow_up_time_time_from_randomization_to_last_contact_date_years
+  ) %>% 
+  mutate(
+    event =
+      ifelse(
+        event == "Yes", 1, 0
+      ),
+    event = 
+      replace_na(event, 0)
+  )
+  
+data_14_group_os_itt$time <- data_14_group_os_itt$time * 12
+  
+# summary(data_14_group_os_itt$fu)
+
+rmarkdown::paged_table(data_14_group_os_itt)
+```
+
+#### Estimation of 3-year survival
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group, data = data_14_group_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate by group"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_ddfs <- survdiff(Surv(time, event) ~ group, data = data_14_group_os_itt)
+logrank_ddfs[6]
+```
+
+#### Stratified Cox regression
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_survfit(
+  survfit(Surv(time, event) ~ group + hormone_receptor_status, data = data_14_group_os_itt),
+  conf.type = "log-log",
+  times = 36,
+  label_header = "**{time} months**",
+  label =  "3-year OS rate by group stratified by hormone receptor status"
+  ) %>% 
+  modify_header(label = "")
+```
+
+#### Stratified log rank test p value
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+logrank_idfs <- survdiff(Surv(time, event) ~ group + hormone_receptor_status, data = data_14_group_os_itt)
+logrank_idfs[6]
+```
