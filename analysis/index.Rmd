@@ -10,7 +10,7 @@ editor_options:
 
 This is the index page of the online repository for the PHERGain study. Here is a list of work packages:
 
-* [Statistical analysis of efficacy endpoints for ASCO 2023](WP1_esmo23-efficacy_2023-04-24.html)
+* [Statistical analysis of efficacy endpoints for ASCO 2023](WP1_asco23-efficacy.html)
 
 * [Regulatory table of safety data for ASCO 2023](WP2_esmo23-safety_2023-04-27.html)
 
