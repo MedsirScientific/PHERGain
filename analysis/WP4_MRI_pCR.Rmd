@@ -1,0 +1,188 @@
+---
+title: "PHERGain | Exploratory analysis for a manuscript on the association of MRI-based measures and pCR. September 2024"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(cowplot)
+library(gt)
+library(gtsummary)
+library(gtreg)
+library(survival)
+library(survminer)
+library(epoxy)
+library(crayon)
+library(grid)
+library(workflowr)
+library(broom)
+library(labelled)
+
+here("WP4_MRI_pCR_manuscript.Rmd")
+
+project_id <- "PHERGain"
+cutoff_date <- as.Date("2024-09-04")
+```
+
+The data cutoff date for these analyses is: `r cutoff_date`
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Reformat the data cutoff date for reading of files
+cutoff_date_formatted <- format(cutoff_date, "%Y_%m_%d")
+```
+
+#
+## Co-primary endpoints in cT1cN0 and cT2N0 patients
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings <- read_excel(
+  here(paste0("data/", "MedOPP096 PHERGain 3-Year Listings Draft 2023-05-12", ".xlsx")),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    patient = subject_id,
+    pcr = p_cr_yp_t0_is_n0
+  )
+
+data_temp_cT1cN0 <- data_temp_listings %>% 
+  filter(
+    group == "Group B",
+    primary_tumor_t == "T1",
+    regional_lymph_nodes_n == "N0"
+  ) %>% 
+  mutate(
+    tnm = "cT1cN0"
+  )
+
+data_temp_cT2N0 <- data_temp_listings %>% 
+  filter(
+    group == "Group B",
+    primary_tumor_t == "T2",
+    regional_lymph_nodes_n == "N0"
+  ) %>% 
+  mutate(
+    tnm = "cT2N0"
+  )
+
+data_temp_her2dx <-  read_excel(
+  here(paste0("data/", "PHERGain_HER2DX", ".xlsx")),
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    patient = id,
+    her2dx_score = model_p_cr_score_group
+  ) %>% 
+  select(
+    patient,
+    her2dx_score
+  )
+
+data_temp_tnm <- full_join(
+  data_temp_cT1cN0,
+  data_temp_cT2N0
+ )
+
+data_tnm <- merge(
+  data_temp_her2dx,
+  data_temp_tnm,
+  by = "patient",
+  all = FALSE
+  )
+
+table_pCR <- data_tnm %>%
+  tbl_summary(
+    missing = "ifany",
+    percent = "column",
+    by = tnm,
+    type = all_dichotomous() ~ "categorical",
+    label = list(
+      pcr ~ "pCR",
+      i_dfs ~ "3-year iDFS"
+    ),
+    include = c(
+      pcr,
+      i_dfs
+      ),
+    missing_text = "Missing"
+  ) %>%
+  modify_header(label = " ") %>%
+  bold_labels()
+
+table_pCR
+```
+
+#
+## pCR by HER2Dx prediction score in cT1cN0 and cT2N0 patients
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+table_pCR_her2dx <- data_tnm %>%
+  tbl_strata(
+    strata = tnm,
+    ~.x %>% tbl_summary(
+    missing = "ifany",
+    percent = "column",
+    by = her2dx_score,
+    type = all_dichotomous() ~ "categorical",
+    label = list(
+      pcr ~ "pCR"
+    ),
+    include = c(
+      pcr
+      ),
+    missing_text = "Missing"
+  ) %>%
+  modify_header(label = " ") %>%
+  bold_labels()
+  )
+
+table_pCR_her2dx
+```
+
+#
+## pCR in cT1cN0 and cT2N0 PET responder patients
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_tnm_responders <- data_tnm %>% 
+  filter(
+    pet_response_conclusion == "Responder"
+  )
+ 
+
+table_pCR_responders <- data_tnm_responders %>%
+  tbl_summary(
+    missing = "ifany",
+    percent = "column",
+    by = tnm,
+    type = all_dichotomous() ~ "categorical",
+    label = list(
+      pcr ~ "pCR in PET Responders"
+    ),
+    include = c(
+      pcr
+      ),
+    missing_text = "Missing"
+  ) %>%
+  modify_header(label = " ") %>%
+  bold_labels()
+
+table_pCR_responders
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+temp <- data_tnm %>%
+  filter(
+    tnm == "cT2N0"
+  ) %>%
+  select(
+    patient,
+    reason_p_cr_not_evaluated
+  )
+```
