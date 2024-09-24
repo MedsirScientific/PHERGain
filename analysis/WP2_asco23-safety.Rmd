@@ -1,0 +1,405 @@
+---
+title: "PHERGain | Statistical Analysis of safety data for ASCO 2023"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(gtsummary)
+library(gtreg)
+
+gtsummary::theme_gtsummary_compact()
+
+here("WP2_asco23-safety.Rmd")
+
+project_id <- "PHERGain"
+listings_date <- as.Date("2023-05-12")
+```
+
+The data cutoff date for these analyses is: `r listings_date`
+
+This report presents the main safety data table (TEAEs by maximum severity) of the PHERGain study that will be showcased in an oral presentation at ASCO 2023.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_00_listings <- read_excel(
+  here(paste0("data/", "MedOPP096 ", project_id, " 3-Year Listings Draft ", listings_date, ".xlsx")),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names()
+
+rmarkdown::paged_table(data_00_listings)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_01_groups <- data_00_listings %>% 
+  # Fetch safety analysis population only
+  subset(
+    safety_population == "Yes"
+  ) %>% 
+  # Use the variable name "participant" to represent unique patient id codes throughout all analyses
+  rename(
+    participant = "subject_id"
+  ) %>% 
+  # Keep the group and hormone receptor expression profile to later model the data
+  select(
+    participant, group, hormone_receptor_status
+  ) %>% 
+  # Exclude patients in group C from analysis
+  subset(
+    group != "Group C"
+    )
+
+rmarkdown::paged_table(data_01_groups)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Create a dataset with safety data
+data_02_aes <- read_excel(
+  here(paste0("data/", "MedOPP096 ", project_id, " 3-Year Listings Draft ", listings_date, ".xlsx")),
+  sheet = "AEs",
+  col_types = c("text", "skip", "numeric", "skip", "text", rep("skip", 2),
+                "text", rep("date", 2), rep("text", 28)
+                )
+  ) %>% 
+  clean_names() %>% 
+  # Use the variable name "participant" to represent unique patient id codes throughout all analyses
+  rename(
+    participant = "subject_id"
+  )
+
+# # Substitute the values "Grade 3" and "Grade 4" in the column called "severity" in the dataframe "data_02_aes" to "Grade ≥3" using the tidyverse
+# data_02_aes <- data_02_aes %>% 
+#   mutate(
+#     severity = case_when(
+#       severity == "Grade 3" ~ "Grade ≥3",
+#       severity == "Grade 4" ~ "Grade ≥3",
+#       TRUE ~ severity
+#     )
+#   )
+
+# Transform the column "severity" into a factor variable with the levels ordered as "Grade 1-2" < "Grade ≥3"
+data_02_aes <- data_02_aes %>%
+  mutate(
+    severity = factor(
+      severity,
+      levels = c("Grade 1-2", "Grade 3", "Grade 4"),
+      ordered = TRUE
+    )
+  )
+
+# Join both datasets to select safety data in the safety analysis population only
+data_03_aes_group <- merge(
+  data_01_groups,
+  data_02_aes,
+  by = "participant",
+  all = TRUE
+  ) %>% 
+  # Exclude patients in group C from analysis
+  subset(
+    group != "Group C"
+    )
+
+rmarkdown::paged_table(data_03_aes_group)
+```
+
+# Regulatory tables with TEAEs by maximum severity in the safety population
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_03_aes_group <- data_03_aes_group %>% 
+  mutate(
+    system_organ_class = if_else(
+      preferred_term == "Hypoaesthesia", "Nervous system disorders", system_organ_class)
+  )
+
+assert_unique <- function(x) {
+  if (length(unique(x)) == 1) {
+    return(unique(x))
+  } else {
+    stop(
+      "The following preferred_term value does not correspond to a unique value in the system_organ_class column: ",
+      names(x)[which(!duplicated(x))],
+      "\n",
+      "The following values in the system_organ_class column correspond to that preferred_term value: ",
+      x[which(!duplicated(x))]
+    )
+  }
+}
+
+data_03_aes_group %>% 
+  group_by(preferred_term) %>% 
+  summarise(
+    system_organ_class = assert_unique(system_organ_class)
+  )
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Select treatment emergent-only adverse events
+data_03_aes_group <- data_03_aes_group %>%
+  subset(
+    treatment_emergent_adverse_event_teae == "Yes"
+    )
+
+# Remove advse events without a grade
+data_03_aes_group <- data_03_aes_group %>%
+  subset(
+    !is.na(severity)
+    )
+
+# We need a first row that displays the incidence of any adverse event by maximum severity
+# Currently, there is no argument in the tbl_ae() function that provides this functionality
+# Filter each adverse event by its maximum severity:
+data_04_aes_group_ms <- data_03_aes_group %>% 
+  group_by(participant, preferred_term) %>%
+  filter(severity == max(severity)) %>%
+  distinct(participant, preferred_term, .keep_all = TRUE) %>% 
+  group_by(participant) %>% 
+  filter(severity == max(severity)) %>% 
+  distinct(participant, .keep_all = TRUE)
+
+data_04_aes_group_ms %>%
+  group_by(group, severity) %>%
+  distinct(participant, .keep_all = FALSE) %>%
+  summarise(n = n())
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_soc <- 
+  data_03_aes_group %>% 
+  tbl_ae(
+    id_df = data_01_groups,
+    id = participant,
+    ae = preferred_term,
+    by = severity, 
+    strata = group,
+    digits = c(0, 0),
+    sort = c("ae")
+  ) %>% 
+  add_overall() %>%
+  modify_header(
+    all_ae_cols() ~ "**{by}**",
+    all_overall_cols() ~ "**Any grade**"
+    ) %>%
+  bold_labels()
+
+tbl_soc
+
+tbl_soc %>%
+  as_flex_table() %>%
+  flextable::save_as_docx(
+    path = here(paste0("output/", "tables/", project_id, "_teaes_table_", as.Date(Sys.Date()), ".docx"))
+  )
+```
+
+# PET responders with pCR in group B
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_05_groupB_idfs_pet_pcr <- data_00_listings %>% 
+  filter(
+    group == "Group B",
+    pet_response_conclusion == "Responder",
+    p_cr_yp_t0_is_n0 == "Yes"
+  ) %>% 
+  rename(
+    participant = "subject_id"
+  ) %>% 
+  select(
+    participant
+  )
+
+data_03b_aes_groupBprime <- merge(
+  data_05_groupB_idfs_pet_pcr,
+  data_03_aes_group,
+  by = "participant",
+  all = FALSE
+)
+
+data_04b_aes_groupBprime_ms <- merge(
+  data_05_groupB_idfs_pet_pcr,
+  data_04_aes_group_ms,
+  by = "participant",
+  all = FALSE
+)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Select treatment emergent-only adverse events
+data_03b_aes_groupBprime <- data_03b_aes_groupBprime %>%
+  subset(
+    treatment_emergent_adverse_event_teae == "Yes"
+    )
+
+# Remove advse events without a grade
+data_03b_aes_groupBprime <- data_03b_aes_groupBprime %>%
+  subset(
+    !is.na(severity)
+    )
+
+# We need a first row that displays the incidence of any adverse event by maximum severity
+# Currently, there is no argument in the tbl_ae() function that provides this functionality
+# Filter each adverse event by its maximum severity:
+data_04c_aes_groupBprime_ms <- data_03b_aes_groupBprime %>% 
+  group_by(participant, preferred_term) %>%
+  filter(severity == max(severity)) %>%
+  distinct(participant, preferred_term, .keep_all = TRUE) %>% 
+  group_by(participant) %>% 
+  filter(severity == max(severity)) %>% 
+  distinct(participant, .keep_all = TRUE)
+
+data_04c_aes_groupBprime_ms %>%
+  group_by(group, severity) %>%
+  distinct(participant, .keep_all = FALSE) %>%
+  summarise(n = n())
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+tbl_soc <- 
+  data_03b_aes_groupBprime %>% 
+  tbl_ae(
+    id_df = data_05_groupB_idfs_pet_pcr,
+    id = participant,
+    ae = preferred_term,
+    by = severity, 
+    # strata = group,
+    digits = c(0, 0),
+    sort = c("ae")
+  ) %>% 
+  add_overall() %>%
+  modify_header(
+    all_ae_cols() ~ "**{by}**",
+    all_overall_cols() ~ "**Any grade**"
+    ) %>%
+  bold_labels()
+
+tbl_soc
+
+tbl_soc %>%
+  as_flex_table() %>%
+  flextable::save_as_docx(
+    path = here(paste0("output/", "tables/", project_id, "_teaes_table_groupB'_", as.Date(Sys.Date()), ".docx"))
+  )
+```
+
+# Grade ≥3 TEAEs by group in the safety population
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Selects TEAEs of grade ≥3 only
+data_03_aes_group$g_teae <- ifelse(
+  data_03_aes_group$treatment_emergent_adverse_event_teae == "Yes" & 
+    data_03_aes_group$grade_3_or_4_or_5_teae == "Yes", 1, 0
+  )
+
+# We want to generate a binary dummy variable that codes whether each patient 
+# in the safety analysis population has experienced at least one TEAE of grade ≥3
+# We aggregate the TEAEs by maximum severity for each patient
+G34TEAE <- aggregate(
+  data_03_aes_group$g_teae ~ data_03_aes_group$participant, FUN = max)
+
+# Update variable names to make them more informative
+colnames(G34TEAE)[1] <- "participant"
+colnames(G34TEAE)[2] <- "G_TEAEs"
+
+# Join both datasets to generate a dataset with the binary codification of grade ≥3 TEAEs
+data_05_g3_teae <- merge(
+  data_01_groups,
+  G34TEAE,
+  by = "participant",
+  all.x = TRUE
+) %>% 
+  # Patients with missing values are patients without grade ≥3 TEAEs
+  mutate(
+    G_TEAEs = replace_na(G_TEAEs, 0)
+  )
+
+# Check how many patients in each group experienced at least one TEAE of grade ≥3
+data_05_g3_teae <- data_05_g3_teae %>% 
+  # Rename the G_TEAEs variable as "G≥3 TEAE" to make it more informative
+  rename(
+    Grade = G_TEAEs,
+    Group = group
+  ) %>%
+  # Change group A for A and group B for B in the Group variable
+  mutate(
+    Group = ifelse(Group == "group A", "Group A", "Group B"),
+    Grade = ifelse(Grade == 1, "Grade ≥3", "Grade <3")
+  )
+
+data_05_g3_teae %>%
+  group_by(Group, Grade) %>% 
+  summarise(n = n())
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Print absolute and relative frequency of patients who experienced at least 
+# one TEAE of grade ≥3 in each group
+table(data_05_g3_teae$Group, data_05_g3_teae$Grade)
+prop.table(table(data_05_g3_teae$Group, data_05_g3_teae$Grade), 1) %>% `*`(100) %>% round(1)
+
+# First statistical model to contrast between groups: Pearson's chi-squared test
+m_g_tae1 <- chisq.test(table(data_05_g3_teae$Group, data_05_g3_teae$Grade))
+m_g_tae1
+```
+
+# SAES by group in the safety population
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# We want to generate a binary dummy variable that codes whether each patient 
+# in the safety analysis population has experienced at least one SAE
+# Recode the variable encoding serious TEAEs
+data_03_aes_group$serious_teae <-ifelse(
+  data_03_aes_group$serious_teae == "Yes", 1, 0
+  )
+
+# We aggregate SAEs by maximum severity for each patient
+SAE <- aggregate(
+  data_03_aes_group$serious_teae ~ data_03_aes_group$participant, FUN = max)
+
+# Update variable names to make them more informative
+colnames(SAE)[1] <- "participant"
+colnames(SAE)[2] <- "SAE"
+
+# Join both datasets to generate a dataset with the binary codification of grade ≥3 TEAEs
+data_06_sae <- merge(
+  data_01_groups,
+  SAE,
+  by = "participant",
+  all.x = TRUE
+) %>% 
+  # Patients with missing values are patients without grade ≥3 TEAEs
+  mutate(
+    SAE = replace_na(SAE, 0)
+  )
+
+# Check how many patients in each group experienced at least one TEAE of grade ≥3
+data_06_sae <- data_06_sae %>% 
+  # Rename the G_TEAEs variable as "G≥3 TEAE" to make it more informative
+  rename(
+    Group = group
+  ) %>%
+  # Change group A for A and group B for B in the Group variable
+  mutate(
+    Group = ifelse(Group == "group A", "Group A", "Group B"),
+    SAE = ifelse(SAE == 1, "Yes", "No")
+  )
+
+data_06_sae %>%
+  group_by(Group, SAE) %>% 
+  summarise(n = n())
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Print absolute and relative frequency of patients who experienced at least 
+# one TEAE of grade ≥3 in each group
+table(data_06_sae$Group, data_06_sae$SAE)
+prop.table(table(data_06_sae$Group, data_06_sae$SAE), 1) %>% `*`(100) %>% round(1)
+
+# First statistical model to contrast between groups: Pearson's chi-squared test
+m_sae1 <- chisq.test(table(data_06_sae$Group, data_06_sae$SAE))
+m_sae1
+```
