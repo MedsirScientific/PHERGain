@@ -10,8 +10,8 @@ editor_options:
 
 This is the index page of the online repository for the PHERGain study. Here is a list of work packages:
 
-* [Statistical analysis of efficacy endpoints for ASCO 2023](WP1_asco23-efficacy.html)
+* [WP1. Statistical analysis of efficacy endpoints for ASCO 2023](WP1_asco23-efficacy.html)
 
-* [Regulatory tables of safety data for ASCO 2023](WP2_asco23-safety.html)
+* [WP2. Regulatory tables of safety data for ASCO 2023](WP2_asco23-safety.html)
 
-* [Statistical analysis for the results section of the second PHERGain manuscript](WP3_manuscript_results_2023-05-05.html)
+* [WP3. Matching of patient ID codes based on their respective tissue sample ID codes.](WP3_translational_sample-IDs.html)

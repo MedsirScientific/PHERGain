@@ -1,0 +1,81 @@
+---
+title: "PHERGain | Identifying patient IDs based on tissue sample IDs. September 2024"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(cowplot)
+library(gt)
+library(gtsummary)
+library(gtreg)
+library(survival)
+library(survminer)
+library(epoxy)
+library(crayon)
+library(grid)
+library(workflowr)
+library(broom)
+library(labelled)
+
+here("WP3_translational_sample-IDs.Rmd")
+
+project_id <- "PHERGain"
+cutoff_date <- as.Date("2024-09-04")
+```
+
+The data cutoff date for these analyses is: `r cutoff_date`
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Reformat the data cutoff date for reading of files
+cutoff_date_formatted <- format(cutoff_date, "%Y_%m_%d")
+```
+
+# Fetch patient IDs based on tissue sample IDs
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_screening <- read_excel(
+  here(paste0("data/", cutoff_date, "/", project_id, "_Screening_", cutoff_date_formatted, ".xlsx")),
+  skip = 1
+  ) %>%
+  clean_names() %>% 
+  select(
+    patient, invasive_histological_subtype, other_invasive_histological_subtype
+  )
+
+data_temp_samples <- read_excel(
+  here(paste0("data/", project_id, "_sample-IDs_", cutoff_date, ".xlsx")),
+  ) %>%
+  clean_names() %>% 
+  select(sample_id) %>% 
+  mutate(
+    patient = substr(sample_id, 3, nchar(sample_id)),
+    patient = gsub("BASELINE20", "", patient),
+    patient = ifelse(nchar(patient) == 8, substr(patient, 4, nchar(patient)), patient),
+    patient = ifelse(nchar(patient) == 10, substr(patient, 5, nchar(patient)), patient),
+    patient = paste0(substr(patient, 1, nchar(patient) - 2), "-0", substr(patient, nchar(patient) - 1, nchar(patient))),
+    patient = ifelse(nchar(patient) == 7, paste0("0", patient), patient)
+  ) %>% 
+  select(patient)
+
+data_sample_ids <- merge(
+  data_temp_samples,
+  data_temp_screening,
+  by = "patient",
+  all = FALSE
+)
+
+write_xlsx(
+  data_sample_ids,
+  here(paste0("output/", "listings/", project_id, "_sample-IDs_", cutoff_date, ".xlsx"))
+  )
+
+rmarkdown::paged_table(data_sample_ids)
+```
