@@ -24,6 +24,7 @@ library(grid)
 library(workflowr)
 library(broom)
 library(labelled)
+library(ggalluvial)
 
 here("WP5_5y_fu_tracker.Rmd")
 
@@ -246,7 +247,7 @@ data_fu <- data_fu %>%
     fu_status = if_else(
       actual_years_since_surgery >= (5 - (14/365.25)), "≥5 years", NA),
     fu_status = if_else(
-      is.na(fu_status) & actual_years_since_surgery >= (4 -  - (14/365.25)), "≥4 <5 years", fu_status),
+      is.na(fu_status) & actual_years_since_surgery >= (4 - (14/365.25)), "≥4 <5 years", fu_status),
     fu_status = if_else(
       is.na(fu_status), "<4 years", fu_status)
   )
@@ -446,3 +447,98 @@ write_xlsx(
 ```
 
 <!-- Under development -->
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+prior_cutoff_date <- as.Date("2024-09-20")
+
+data_temp_sankey <- read_excel(
+  here(paste0("output/", "listings/", project_id, "_icf-extension-tracker_", prior_cutoff_date, ".xlsx")),
+  sheet = "Follow-up",
+  skip = 1
+  ) %>% 
+  clean_names() %>% 
+  select(
+    patient,
+    x5_years_follow_up_category
+  ) %>% 
+  rename(
+    source = x5_years_follow_up_category
+  )
+
+data_temp_sankey %>% 
+  group_by(source) %>% 
+  summarize(
+    n = n()
+  )
+
+data_sankey <- merge(
+  data_temp_sankey,
+  data_fu,
+  by = "patient",
+  all = TRUE
+  ) %>% 
+  select(
+    patient,
+    fu_status,
+    source
+  ) %>% 
+  rename(
+    target = fu_status
+  ) %>% 
+  mutate(
+    source = factor(source, levels = c("≥5 years", "≥4 <5 years", "<4 years")),
+    target = factor(target, levels = c("≥5 years", "≥4 <5 years", "<4 years")),
+  )
+
+remove(data_temp_sankey)
+```
+
+```{r}
+df_combination_counts <- data_sankey %>%
+  group_by(source, target) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+custom_colors <- c(
+  "<4 years"    = "#DF4353",
+  "≥4 <5 years" = "#D5BF23",
+  "≥5 years"    = "#227988"
+  )
+
+sankey <- ggplot(
+  df_combination_counts,
+  aes(
+    axis1 = source,
+    axis2 = target,
+    y = count)
+  ) +
+  geom_alluvium(
+    aes(fill = source),
+    width = 1/12
+    ) +
+  geom_stratum(aes(fill = after_stat(stratum)), width = 1/12, color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2.8, angle = 90) +
+  scale_x_discrete(
+    limits = c("Source", "Target"),
+    labels = c("2024-09-20", "2024-09-25"),
+    expand = c(0.15, 0.05)
+    ) +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = "Flow of follow-up data entry since last check",
+    x = "Timepoint", y = "Number of Patients"
+    ) +
+  guides(fill = guide_legend(title = "Follow-up status at 2024-09-20")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Save the plot
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_sankey_", cutoff_date, ".png")),
+  plot = sankey,
+  width = 8,
+  height = 6
+  )
+
+sankey
+```
