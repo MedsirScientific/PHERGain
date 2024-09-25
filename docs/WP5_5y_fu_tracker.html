@@ -514,15 +514,15 @@ project makes it easier to run your code on other machines.</p>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreefd7745a5e9e5e03ec87fa5d700e3e793afd06526targetblankfd7745aa">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree80c7870d91aeeb470ab1c9d71740e25608c3f393targetblank80c7870a">
 <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span> <strong>Repository version:</strong>
-<a href="https://github.com/MedsirScientific/PHERGain/tree/fd7745a5e9e5e03ec87fa5d700e3e793afd06526" target="_blank">fd7745a</a>
+<a href="https://github.com/MedsirScientific/PHERGain/tree/80c7870d91aeeb470ab1c9d71740e25608c3f393" target="_blank">80c7870</a>
 </a>
 </p>
 </div>
 <div
-id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreefd7745a5e9e5e03ec87fa5d700e3e793afd06526targetblankfd7745aa"
+id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree80c7870d91aeeb470ab1c9d71740e25608c3f393targetblank80c7870a"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -532,7 +532,7 @@ reproducibility.
 </p>
 <p>
 The results in this page were generated with repository version
-<a href="https://github.com/MedsirScientific/PHERGain/tree/fd7745a5e9e5e03ec87fa5d700e3e793afd06526" target="_blank">fd7745a</a>.
+<a href="https://github.com/MedsirScientific/PHERGain/tree/80c7870d91aeeb470ab1c9d71740e25608c3f393" target="_blank">80c7870</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -637,6 +637,40 @@ Message
 Rmd
 </td>
 <td>
+<a href="https://github.com/MedsirScientific/PHERGain/blob/80c7870d91aeeb470ab1c9d71740e25608c3f393/analysis/WP5_5y_fu_tracker.Rmd" target="_blank">80c7870</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-09-25
+</td>
+<td>
+Update heading of last chunk of code in WP5
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/MedsirScientific/PHERGain/1be0a605f9081df4e487cdc406da2bc32a05efa4/docs/WP5_5y_fu_tracker.html" target="_blank">1be0a60</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-09-25
+</td>
+<td>
+Build site.
+</td>
+</tr>
+<tr>
+<td>
+Rmd
+</td>
+<td>
 <a href="https://github.com/MedsirScientific/PHERGain/blob/fd7745a5e9e5e03ec87fa5d700e3e793afd06526/analysis/WP5_5y_fu_tracker.Rmd" target="_blank">fd7745a</a>
 </td>
 <td>
@@ -701,66 +735,7 @@ Update WP5 to ensure it reads out the manual tracker Trial provides
 1 &lt;4 years      122
 2 ≥4 &lt;5 years    70
 3 ≥5 years      106</code></pre>
-<pre class="r"><code>df_combination_counts &lt;- data_sankey %&gt;%
-  group_by(source, target) %&gt;%
-  summarise(count = n()) %&gt;%
-  ungroup()</code></pre>
-<pre><code>`summarise()` has grouped output by &#39;source&#39;. You can override using the
-`.groups` argument.</code></pre>
-<pre class="r"><code>custom_colors &lt;- c(
-  &quot;&lt;4 years&quot;    = &quot;#DF4353&quot;,
-  &quot;≥4 &lt;5 years&quot; = &quot;#D5BF23&quot;,
-  &quot;≥5 years&quot;    = &quot;#227988&quot;
-  )
-
-sankey &lt;- ggplot(
-  df_combination_counts,
-  aes(
-    axis1 = source,
-    axis2 = target,
-    y = count)
-  ) +
-  geom_alluvium(
-    aes(fill = source),
-    width = 1/12
-    ) +
-  geom_stratum(aes(fill = after_stat(stratum)), width = 1/12, color = &quot;black&quot;) +
-  geom_text(stat = &quot;stratum&quot;, aes(label = after_stat(stratum)), size = 2.8, angle = 90) +
-  scale_x_discrete(
-    limits = c(&quot;Source&quot;, &quot;Target&quot;),
-    labels = c(&quot;2024-09-20&quot;, &quot;2024-09-25&quot;),
-    expand = c(0.15, 0.05)
-    ) +
-  scale_fill_manual(values = custom_colors) +
-  labs(
-    title = &quot;Flow of follow-up data entry since last check&quot;,
-    x = &quot;Timepoint&quot;, y = &quot;Number of Patients&quot;
-    ) +
-  guides(fill = guide_legend(title = &quot;Follow-up status at 2024-09-20&quot;)) +
-  theme_minimal() +
-  theme(legend.position = &quot;none&quot;)
-
-# Save the plot
-ggsave(
-  here(paste0(&quot;output/&quot;, &quot;figures/&quot;, project_id, &quot;_sankey_&quot;, cutoff_date, &quot;.png&quot;)),
-  plot = sankey,
-  width = 8,
-  height = 6
-  )</code></pre>
-<pre><code>Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.
-Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.
-Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.</code></pre>
-<pre class="r"><code>sankey</code></pre>
-<pre><code>Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.
-Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.
-Warning in to_lodes_form(data = data, axes = axis_ind, discern =
-params$discern): Some strata appear at multiple axes.</code></pre>
-<p><img src="figure/WP5_5y_fu_tracker.Rmd/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><img src="figure/WP5_5y_fu_tracker.Rmd/sankey-1.png" width="672" style="display: block; margin: auto;" /></p>
 <br>
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
