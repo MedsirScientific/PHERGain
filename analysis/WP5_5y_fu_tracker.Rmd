@@ -493,7 +493,7 @@ data_sankey <- merge(
 remove(data_temp_sankey)
 ```
 
-```{r}
+```{r sankey, message = FALSE, warning = FALSE, echo = FALSE}
 df_combination_counts <- data_sankey %>%
   group_by(source, target) %>%
   summarise(count = n()) %>%
