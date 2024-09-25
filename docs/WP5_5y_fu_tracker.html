@@ -514,15 +514,15 @@ project makes it easier to run your code on other machines.</p>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreee7f244fe21120413256c5816ef3e7d5765ca296atargetblanke7f244fa">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreefd7745a5e9e5e03ec87fa5d700e3e793afd06526targetblankfd7745aa">
 <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span> <strong>Repository version:</strong>
-<a href="https://github.com/MedsirScientific/PHERGain/tree/e7f244fe21120413256c5816ef3e7d5765ca296a" target="_blank">e7f244f</a>
+<a href="https://github.com/MedsirScientific/PHERGain/tree/fd7745a5e9e5e03ec87fa5d700e3e793afd06526" target="_blank">fd7745a</a>
 </a>
 </p>
 </div>
 <div
-id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreee7f244fe21120413256c5816ef3e7d5765ca296atargetblanke7f244fa"
+id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintreefd7745a5e9e5e03ec87fa5d700e3e793afd06526targetblankfd7745aa"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -532,7 +532,7 @@ reproducibility.
 </p>
 <p>
 The results in this page were generated with repository version
-<a href="https://github.com/MedsirScientific/PHERGain/tree/e7f244fe21120413256c5816ef3e7d5765ca296a" target="_blank">e7f244f</a>.
+<a href="https://github.com/MedsirScientific/PHERGain/tree/fd7745a5e9e5e03ec87fa5d700e3e793afd06526" target="_blank">fd7745a</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -563,7 +563,6 @@ Ignored files:
     Ignored:    data/PHERGain_HER2DX.xlsx
     Ignored:    data/PHERGain_data-management_2023-04-24.xlsx
     Ignored:    data/PHERGain_sample-IDs_2024-09-04.xlsx
-    Ignored:    data/~$MEDOPP096 Global Status 2023.xlsx
     Ignored:    output/.DS_Store
 
 Untracked files:
@@ -638,6 +637,41 @@ Message
 Rmd
 </td>
 <td>
+<a href="https://github.com/MedsirScientific/PHERGain/blob/fd7745a5e9e5e03ec87fa5d700e3e793afd06526/analysis/WP5_5y_fu_tracker.Rmd" target="_blank">fd7745a</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-09-25
+</td>
+<td>
+Update WP5 to add a sankey diagram showing the flow of follow-up data
+since last checkpoint
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/MedsirScientific/PHERGain/94b9d3e778e10d1ff01b9bd2168b063215008bcd/docs/WP5_5y_fu_tracker.html" target="_blank">94b9d3e</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-09-25
+</td>
+<td>
+Build site.
+</td>
+</tr>
+<tr>
+<td>
+Rmd
+</td>
+<td>
 <a href="https://github.com/MedsirScientific/PHERGain/blob/e7f244fe21120413256c5816ef3e7d5765ca296a/analysis/WP5_5y_fu_tracker.Rmd" target="_blank">e7f244f</a>
 </td>
 <td>
@@ -661,6 +695,72 @@ Update WP5 to ensure it reads out the manual tracker Trial provides
 <p>The data cutoff date for these analyses is: 2024-09-25</p>
 <!-- Under development -->
 <!-- Under development -->
+<pre><code># A tibble: 3 × 2
+  source          n
+  &lt;chr&gt;       &lt;int&gt;
+1 &lt;4 years      122
+2 ≥4 &lt;5 years    70
+3 ≥5 years      106</code></pre>
+<pre class="r"><code>df_combination_counts &lt;- data_sankey %&gt;%
+  group_by(source, target) %&gt;%
+  summarise(count = n()) %&gt;%
+  ungroup()</code></pre>
+<pre><code>`summarise()` has grouped output by &#39;source&#39;. You can override using the
+`.groups` argument.</code></pre>
+<pre class="r"><code>custom_colors &lt;- c(
+  &quot;&lt;4 years&quot;    = &quot;#DF4353&quot;,
+  &quot;≥4 &lt;5 years&quot; = &quot;#D5BF23&quot;,
+  &quot;≥5 years&quot;    = &quot;#227988&quot;
+  )
+
+sankey &lt;- ggplot(
+  df_combination_counts,
+  aes(
+    axis1 = source,
+    axis2 = target,
+    y = count)
+  ) +
+  geom_alluvium(
+    aes(fill = source),
+    width = 1/12
+    ) +
+  geom_stratum(aes(fill = after_stat(stratum)), width = 1/12, color = &quot;black&quot;) +
+  geom_text(stat = &quot;stratum&quot;, aes(label = after_stat(stratum)), size = 2.8, angle = 90) +
+  scale_x_discrete(
+    limits = c(&quot;Source&quot;, &quot;Target&quot;),
+    labels = c(&quot;2024-09-20&quot;, &quot;2024-09-25&quot;),
+    expand = c(0.15, 0.05)
+    ) +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = &quot;Flow of follow-up data entry since last check&quot;,
+    x = &quot;Timepoint&quot;, y = &quot;Number of Patients&quot;
+    ) +
+  guides(fill = guide_legend(title = &quot;Follow-up status at 2024-09-20&quot;)) +
+  theme_minimal() +
+  theme(legend.position = &quot;none&quot;)
+
+# Save the plot
+ggsave(
+  here(paste0(&quot;output/&quot;, &quot;figures/&quot;, project_id, &quot;_sankey_&quot;, cutoff_date, &quot;.png&quot;)),
+  plot = sankey,
+  width = 8,
+  height = 6
+  )</code></pre>
+<pre><code>Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.
+Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.
+Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.</code></pre>
+<pre class="r"><code>sankey</code></pre>
+<pre><code>Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.
+Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.
+Warning in to_lodes_form(data = data, axes = axis_ind, discern =
+params$discern): Some strata appear at multiple axes.</code></pre>
+<p><img src="figure/WP5_5y_fu_tracker.Rmd/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" /></p>
 <br>
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
@@ -689,39 +789,41 @@ attached base packages:
 [8] base     
 
 other attached packages:
- [1] labelled_2.13.0 broom_1.0.5     crayon_1.5.2    epoxy_1.0.0    
- [5] survminer_0.4.9 ggpubr_0.6.0    survival_3.5-7  gtreg_0.3.0    
- [9] gtsummary_1.7.2 gt_0.10.1       cowplot_1.1.3   here_1.0.1     
-[13] janitor_2.2.0   writexl_1.4.2   readxl_1.4.3    lubridate_1.9.3
-[17] forcats_1.0.0   stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2    
-[21] readr_2.1.5     tidyr_1.3.1     tibble_3.2.1    ggplot2_3.4.4  
-[25] tidyverse_2.0.0 workflowr_1.7.1
+ [1] ggalluvial_0.12.5 labelled_2.13.0   broom_1.0.5       crayon_1.5.2     
+ [5] epoxy_1.0.0       survminer_0.4.9   ggpubr_0.6.0      survival_3.5-7   
+ [9] gtreg_0.3.0       gtsummary_1.7.2   gt_0.10.1         cowplot_1.1.3    
+[13] here_1.0.1        janitor_2.2.0     writexl_1.4.2     readxl_1.4.3     
+[17] lubridate_1.9.3   forcats_1.0.0     stringr_1.5.1     dplyr_1.1.4      
+[21] purrr_1.0.2       readr_2.1.5       tidyr_1.3.1       tibble_3.2.1     
+[25] ggplot2_3.4.4     tidyverse_2.0.0   workflowr_1.7.1  
 
 loaded via a namespace (and not attached):
- [1] tidyselect_1.2.0     fastmap_1.2.0        promises_1.2.1      
- [4] broom.helpers_1.14.0 digest_0.6.35        timechange_0.3.0    
- [7] lifecycle_1.0.4      processx_3.8.4       magrittr_2.0.3      
-[10] compiler_4.3.2       rlang_1.1.4          sass_0.4.9          
-[13] tools_4.3.2          utf8_1.2.4           yaml_2.3.8          
-[16] data.table_1.15.0    knitr_1.47           ggsignif_0.6.4      
-[19] xml2_1.3.6           abind_1.4-5          withr_3.0.0         
-[22] fansi_1.0.6          git2r_0.33.0         xtable_1.8-4        
-[25] colorspace_2.1-0     scales_1.3.0         cli_3.6.2           
-[28] rmarkdown_2.27       generics_0.1.3       rstudioapi_0.16.0   
-[31] km.ci_0.5-6          httr_1.4.7           tzdb_0.4.0          
-[34] cachem_1.1.0         splines_4.3.2        cellranger_1.1.0    
-[37] survMisc_0.5.6       vctrs_0.6.5          Matrix_1.6-1.1      
-[40] jsonlite_1.8.8       carData_3.0-5        car_3.1-2           
-[43] callr_3.7.6          hms_1.1.3            rstatix_0.7.2       
-[46] jquerylib_0.1.4      glue_1.7.0           ps_1.7.6            
-[49] stringi_1.8.4        gtable_0.3.4         later_1.3.2         
-[52] munsell_0.5.1        pillar_1.9.0         htmltools_0.5.8.1   
-[55] R6_2.5.1             KMsurv_0.1-5         rprojroot_2.0.4     
-[58] evaluate_0.24.0      lattice_0.21-9       haven_2.5.4         
-[61] backports_1.4.1      snakecase_0.11.1     httpuv_1.6.14       
-[64] bslib_0.7.0          Rcpp_1.0.12          gridExtra_2.3       
-[67] whisker_0.4.1        xfun_0.44            zoo_1.8-12          
-[70] fs_1.6.4             getPass_0.2-4        pkgconfig_2.0.3     </code></pre>
+ [1] tidyselect_1.2.0     farver_2.1.2         fastmap_1.2.0       
+ [4] promises_1.2.1       broom.helpers_1.14.0 digest_0.6.35       
+ [7] timechange_0.3.0     lifecycle_1.0.4      processx_3.8.4      
+[10] magrittr_2.0.3       compiler_4.3.2       rlang_1.1.4         
+[13] sass_0.4.9           tools_4.3.2          utf8_1.2.4          
+[16] yaml_2.3.8           data.table_1.15.0    knitr_1.47          
+[19] ggsignif_0.6.4       labeling_0.4.3       xml2_1.3.6          
+[22] abind_1.4-5          withr_3.0.0          fansi_1.0.6         
+[25] git2r_0.33.0         xtable_1.8-4         colorspace_2.1-0    
+[28] scales_1.3.0         cli_3.6.2            rmarkdown_2.27      
+[31] ragg_1.2.7           generics_0.1.3       rstudioapi_0.16.0   
+[34] km.ci_0.5-6          httr_1.4.7           tzdb_0.4.0          
+[37] cachem_1.1.0         splines_4.3.2        cellranger_1.1.0    
+[40] survMisc_0.5.6       vctrs_0.6.5          Matrix_1.6-1.1      
+[43] jsonlite_1.8.8       carData_3.0-5        car_3.1-2           
+[46] callr_3.7.6          hms_1.1.3            rstatix_0.7.2       
+[49] systemfonts_1.1.0    jquerylib_0.1.4      glue_1.7.0          
+[52] ps_1.7.6             stringi_1.8.4        gtable_0.3.4        
+[55] later_1.3.2          munsell_0.5.1        pillar_1.9.0        
+[58] htmltools_0.5.8.1    R6_2.5.1             KMsurv_0.1-5        
+[61] textshaping_0.3.7    rprojroot_2.0.4      evaluate_0.24.0     
+[64] lattice_0.21-9       highr_0.11           haven_2.5.4         
+[67] backports_1.4.1      snakecase_0.11.1     httpuv_1.6.14       
+[70] bslib_0.7.0          Rcpp_1.0.12          gridExtra_2.3       
+[73] whisker_0.4.1        xfun_0.44            zoo_1.8-12          
+[76] fs_1.6.4             getPass_0.2-4        pkgconfig_2.0.3     </code></pre>
 </div>
 
 
