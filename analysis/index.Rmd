@@ -14,6 +14,8 @@ This is the index page of the online repository for the PHERGain study. Here is 
 
 * [WP2. Regulatory tables of safety data for ASCO 2023](WP2_asco23-safety.html)
 
-* [WP3. Matching of patient ID codes based on their respective tissue sample ID codes.](WP3_translational_sample-IDs.html)
+* [WP3. Matching of patient ID codes based on their respective tissue sample ID codes](WP3_translational_sample-IDs.html)
 
-* [WP4. Statistical analysis of efficacy endpoints for a manuscript on the concordance of MRI assessments and pCR results.](WP4_MRI_pCR.html)
+* [WP4. Statistical analysis of efficacy endpoints for a manuscript on the concordance of MRI assessments and pCR results](WP4_MRI_pCR.html)
+
+* [WP5. Data management tracker for the 5-year extension of the study](WP5_5y_fu_tracker.html)

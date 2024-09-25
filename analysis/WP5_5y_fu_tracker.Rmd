@@ -1,0 +1,448 @@
+---
+title: "PHERGain | Tracker of 5-year follow-up data. September 2024"
+author: "Daniel Alcala"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(cowplot)
+library(gt)
+library(gtsummary)
+library(gtreg)
+library(survival)
+library(survminer)
+library(epoxy)
+library(crayon)
+library(grid)
+library(workflowr)
+library(broom)
+library(labelled)
+
+here("WP5_5y_fu_tracker.Rmd")
+
+project_id <- "PHERGain"
+cutoff_date <- as.Date("2024-09-25")
+listings_date <- as.Date("2023-05-12")
+```
+
+The data cutoff date for these analyses is: `r cutoff_date`
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Reformat the data cutoff date for reading of files
+cutoff_date_formatted <- format(cutoff_date, "%Y_%m_%d")
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings <- read_excel(
+    here(paste0("data/", "MedOPP096 ", project_id, " 3-Year Listings Draft ", listings_date, ".xlsx")),
+    sheet = "SUBJECT"
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    patient = subject_id,
+    surgery_date = date_of_surgery_performed,
+    eos_3y = eo_s_has_the_patient_terminated_prematurely_the_study,
+    eos_reason_3y = reason_of_end_of_study,
+  ) %>% 
+  mutate(
+    eos_3y = ifelse(
+      patient == "0112-024", "No", eos_3y),   # This patient needs to be followed up
+    eos_reason_3y = ifelse(
+      patient == "0112-024", NA, eos_reason_3y),
+    eos_3y = ifelse(
+      patient == "0303-002", "No", eos_3y),   # This patient needs to be followed up
+    eos_reason_3y = ifelse(
+      patient == "0303-002", NA, eos_reason_3y),
+    group = substr(group, 7, nchar(group)),
+  ) %>% 
+  filter(
+    group != "C",
+    surgery_performed == "Yes"
+  ) %>% 
+  select(
+    patient, group, surgery_date, eos_3y, eos_reason_3y
+  )
+
+data_temp_fu <- read_excel(
+  here(paste0("data/", cutoff_date, "/", project_id, "_Follow-Up_", cutoff_date_formatted, ".xlsx")),
+  skip = 1
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    group = cohort,
+    status = vital_status,
+  ) %>% 
+  mutate(
+    contact_date = dmy(contact_date),
+  ) %>%
+  select(
+    patient,
+    group,
+    event_num,
+    follow_up_visit,
+    contact_date,
+    type_of_contact,
+    status
+  )
+
+data_fu <- left_join(
+  data_temp_listings,
+  data_temp_fu,
+  by = c("patient", "group"),
+  ) %>% 
+  mutate(
+    five_years_from_surgery = as.Date(surgery_date) + years(5),
+    five_years_completed = ifelse(lubridate::today() >= five_years_from_surgery, "Yes", "No"),
+    actual_years_since_surgery = as.numeric(difftime(contact_date, surgery_date, units = "days") / 365.25),
+    site = substr(patient, 1, 4),
+    itt_5y = if_else(
+      eos_3y == "Yes", "No", "Yes"),
+    itt_5y = if_else(
+      site == "0504", "No", itt_5y),
+    itt_5y = if_else(
+      site == "1001", "No", itt_5y)
+  ) %>% 
+  rename(
+    last_contact_date = contact_date,
+    five_years_passed_already = five_years_completed
+  ) %>% 
+  select(
+    site,
+    patient,
+    itt_5y,
+    surgery_date,
+    five_years_from_surgery,
+    five_years_passed_already,
+    eos_3y,
+    eos_reason_3y,
+    last_contact_date,
+    actual_years_since_surgery,
+    status
+    ) %>% 
+  arrange(
+    patient,
+    desc(last_contact_date)
+  ) %>%
+  distinct(
+    patient,
+    .keep_all = TRUE
+  )
+
+remove(data_temp_listings, data_temp_fu)
+
+# write_xlsx(
+#   data_fu,
+#   here(paste0("output/", "listings/", project_id, "_5y-itt-tracker_", cutoff_date, ".xlsx"))
+#   )
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_icf <- read_excel(
+  here(paste0("data/", cutoff_date, "/", project_id, "_Informed Consent_", cutoff_date_formatted, ".xlsx")),
+  sheet = "Informed Consent",
+  skip = 1
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    icf_extension = subject_has_provided_written_informed_consent
+  )
+
+data_temp_icf_date <- read_excel(
+  here(paste0("data/", cutoff_date, "/", project_id, "_Informed Consent_", cutoff_date_formatted, ".xlsx")),
+  sheet = "ICF",
+  skip = 1
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    icf_extension_date = date_consent_obtained
+  ) %>% 
+  mutate(
+    icf_extension_date = dmy(icf_extension_date),
+  )%>%
+  select(
+    patient, icf_extension_date
+  )
+
+data_icf <- merge(
+  data_temp_icf,
+  data_temp_icf_date,
+  by = "patient",
+  all = TRUE
+  )
+
+remove(data_temp_icf, data_temp_icf_date)
+
+data_fu <- merge(
+  data_icf,
+  data_fu,
+  by = c("patient"),
+  all = TRUE
+  ) %>% 
+  filter(
+    itt_5y == "Yes"
+  ) %>%
+  select(
+   site,
+   patient,
+   itt_5y,
+   icf_extension,
+   icf_extension_date,
+   surgery_date,
+   five_years_from_surgery,
+   five_years_passed_already, 
+   actual_years_since_surgery,
+   eos_3y,
+   eos_reason_3y,
+   last_contact_date,
+   status
+  )
+
+remove(data_icf)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# data_temp_icf <- read_excel(
+#   here(paste0("output/", "listings/", project_id, "_5y-icf-signature-tracker_", cutoff_date, ".xlsx")),
+#   na = c("Pending")
+#   ) %>% 
+#   mutate(
+#     icf_extension = as.Date(icf_extension)
+#   )
+# 
+# data_fu <- merge(
+#   data_temp_icf,
+#   data_fu,
+#   by = c("site", "patient"),
+#   all = FALSE
+#   )
+# 
+# qa_reference_date <- data_fu %>% 
+#   mutate(
+#     reference_check = if_else(
+#       surgery_date == reference_date, "Yes", "No")
+#   ) %>% 
+#   filter(reference_check == "No") %>% 
+#   select(patient, reference_date, surgery_date)
+# 
+# write_xlsx(
+#   qa_reference_date,
+#   here(paste0("output/", "listings/", project_id, "_QA_reference-date_check_", cutoff_date, ".xlsx"))
+#   )
+# 
+# remove(qa_reference_date, data_temp_icf)
+# data_fu <- data_fu %>% select(-c(reference_date))
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_fu <- data_fu %>% 
+  mutate(
+    fu_status = if_else(
+      actual_years_since_surgery >= (5 - (14/365.25)), "≥5 years", NA),
+    fu_status = if_else(
+      is.na(fu_status) & actual_years_since_surgery >= (4 -  - (14/365.25)), "≥4 <5 years", fu_status),
+    fu_status = if_else(
+      is.na(fu_status), "<4 years", fu_status)
+  )
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+values_to_keep <- c("4 year", "5 year", "6 year", "Other")
+
+data_temp_fu <- read_excel(
+  here(paste0("data/", cutoff_date, "/", project_id, "_Follow-Up_", cutoff_date_formatted, ".xlsx")),
+  skip = 1
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    group = cohort,
+    status = vital_status,
+  ) %>% 
+  mutate(
+    contact_date = dmy(contact_date),
+  ) %>%
+  select(
+    patient,
+    follow_up_visit,
+    contact_date
+  ) %>% 
+  filter(
+    follow_up_visit %in% values_to_keep
+  )
+
+data_temp_fu_visits <- merge(
+  data_fu,
+  data_temp_fu,
+  by = "patient",
+  all = TRUE
+  ) %>% 
+  select(
+    site,
+    patient,
+    itt_5y,
+    surgery_date,
+    five_years_from_surgery,
+    five_years_passed_already,
+    icf_extension,
+    icf_extension_date,
+    follow_up_visit,
+    contact_date,
+    last_contact_date,
+    status,
+    actual_years_since_surgery,
+    fu_status
+  )
+
+data_temp_itt <- data_fu %>% 
+  select(patient)
+
+###----------------------------------------------------------------------------
+### TO DO: Might overwrite the data_fu object ###------------------------------
+###----------------------------------------------------------------------------
+data_temp_fu_visits_itt <- merge(
+  data_temp_fu_visits,
+  data_temp_itt,
+  by = "patient",
+  all = FALSE
+  ) %>% 
+  mutate(
+    follow_up_time = as.numeric(difftime(contact_date, surgery_date, units = "days") / 365.25)
+  ) %>% 
+  select(
+    site,
+    patient,
+    itt_5y,
+    surgery_date,
+    five_years_from_surgery,
+    five_years_passed_already,
+    icf_extension,
+    icf_extension_date,
+    follow_up_visit,
+    contact_date,
+    follow_up_time,
+    last_contact_date,
+    status,
+    actual_years_since_surgery,
+    fu_status
+  )
+
+remove(data_temp_itt, data_temp_fu, data_temp_fu_visits, data_temp_itt)
+
+write_xlsx(
+  data_temp_fu_visits_itt,
+  here(paste0("output/", "listings/", project_id, "_ecrf-update-tracker_", cutoff_date, ".xlsx"))
+  )
+
+data_temp_trial <- read_excel(
+  here(paste0("data/", "MEDOPP096 Global Status 2023", ".xlsx")),
+  sheet = "ICF&FU",
+  skip = 8
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    icf_extension_trial = icf_signed,
+  ) %>% 
+  mutate(
+    icf_extension_trial = ifelse(icf_extension_trial == "NA", NA, icf_extension_trial),
+  ) %>% 
+  select(
+    patient,
+    icf_extension_trial,
+  )
+
+data_fu <- merge(
+  data_temp_fu_visits_itt,
+  data_temp_trial,
+  by = "patient",
+  all = FALSE
+  ) %>% 
+  mutate(
+    icf_extension_trial = ifelse(
+      icf_extension_trial == "yes", "Yes", icf_extension_trial),
+    icf_extension_check = if_else(
+      icf_extension == icf_extension_trial | (icf_extension == "Yes" & icf_extension_trial == "Oral"), "Yes", "No"),
+    icf_extension_combined = if_else(
+      !is.na(icf_extension), icf_extension, NA),
+    icf_extension_combined = if_else(
+      is.na(icf_extension), icf_extension_trial, icf_extension_combined),
+    icf_extension_combined = if_else(
+      icf_extension == "No" & icf_extension != icf_extension_trial, icf_extension_trial, icf_extension_combined),
+    icf_extension_combined = if_else(
+      is.na(icf_extension) & !is.na(icf_extension_trial), icf_extension_trial, icf_extension_combined)
+  ) %>% 
+  select(
+    site,
+    patient,
+    itt_5y,
+    icf_extension,
+    icf_extension_date,
+    icf_extension_trial,
+    icf_extension_check,
+    icf_extension_combined,
+    surgery_date,
+    five_years_from_surgery,
+    five_years_passed_already,
+    contact_date,
+    last_contact_date,
+    status,
+    actual_years_since_surgery,
+    fu_status
+  ) %>% 
+  arrange(
+    patient,
+    desc(last_contact_date)
+  ) %>%
+  distinct(
+    patient,
+    .keep_all = TRUE
+  )
+
+write_xlsx(
+  data_fu,
+  here(paste0("output/", "listings/", project_id, "_icf-extension-tracker_", cutoff_date, ".xlsx"))
+  )
+```
+
+<!-- Under development -->
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# patients_with_4_year <- data_temp_fu_visits_itt %>%
+#   filter(follow_up_visit == "4 year") %>%
+#   select(patient)
+# 
+# patients_with_only_4_year <- data_temp_fu_visits_itt %>%
+#   filter(patient %in% patients_with_4_year$patient) %>%
+#   group_by(patient) %>%
+#   summarize(all_visits = paste(unique(follow_up_visit), collapse = ", ")) %>%
+#   filter(all_visits == "4 year")
+# 
+# data_temp_fu_5y_tracker <- data_temp_fu_visits_itt %>% 
+#   select(patient, fu_status)
+# 
+# data_patients_with_only_4_year <- merge(
+#   data_temp_fu_5y_tracker,
+#   patients_with_only_4_year,
+#   by = "patient",
+#   all = TRUE
+#   )
+# 
+# data_patients_with_only_4_year_tracker <- data_patients_with_only_4_year %>% 
+#   filter(!is.na(all_visits))
+# 
+# data_patients_with_only_4_year <- merge(
+#   data_patients_with_only_4_year_tracker,
+#   data_temp_fu_visits_itt,
+#   by = c("patient", "fu_status"),
+#   all = FALSE
+#   )
+# 
+# remove(data_temp_fu_5y_tracker, patients_with_4_year, patients_with_only_4_year, data_patients_with_only_4_year_tracker)
+```
+
+<!-- Under development -->
