@@ -408,6 +408,15 @@ write_xlsx(
   data_fu,
   here(paste0("output/", "listings/", project_id, "_icf-extension-tracker_", cutoff_date, ".xlsx"))
   )
+
+data_fu %>% 
+  group_by(fu_status) %>% 
+  summarize(
+    n = n()
+  ) %>% 
+  rename(
+    "Data at 2024-09-25" = fu_status
+  )
 ```
 
 <!-- Under development -->
@@ -469,6 +478,9 @@ data_temp_sankey %>%
   group_by(source) %>% 
   summarize(
     n = n()
+  ) %>% 
+  rename(
+    "Data at 2024-09-20" = source
   )
 
 data_sankey <- merge(
