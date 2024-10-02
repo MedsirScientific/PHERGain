@@ -19,3 +19,5 @@ This is the index page of the online repository for the PHERGain study. Here is 
 * [WP4. Statistical analysis of efficacy endpoints for a manuscript on the concordance of MRI assessments and pCR results](WP4_MRI_pCR.html)
 
 * [WP5. Data management tracker for the 5-year extension of the study](WP5_5y_fu_tracker.html)
+
+* [WP6. Exploratory analysis of health-related quality of life data](WP6_HRQoL.html)
