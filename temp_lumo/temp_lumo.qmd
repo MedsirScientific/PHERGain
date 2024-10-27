@@ -1,6 +1,8 @@
 ---
 title: "PHERGain | Exploratory analysis of health-related quality of life data (HR-QoL)"
 subtitle: ""
+project:
+  output-dir: docs
 format:
   lumo-html: 
     logo: "logo.png"                                                   # Optional. Path to a logo displayed above the title
@@ -13,28 +15,247 @@ author: Daniel Alcalá-López
 date: last-modified
 ---
 
-
-
-
 ## Introduction
 
-Quarto is probably my favorite tool in the R/Python universe. Transforming your code and thoughts into a stunning report in one click always blows my mind.
-
-While the default Quarto appearance **looks great**, there are [a few tweaks](https://www.productive-r-workflow.com/quarto-tricks) I always apply to elevate the report even further. Rather than manually adding them each time, I bundled everything into a custom format called `lumo`.
-
-
-::: {.column-margin}
-
-Btw, you can learn how to master Quarto thanks to my online course: [Productive R Workflow](https://www.productive-r-workflow.com)
-
-:::
-
-
-This document aims at showcasing how a quarto document made with the `lumo` format looks like.
-
+This is a first attempt at transitioning to the Quarto framework for data management and statistical analysis reports.
 
 ## Documentation
 
 The documentation for this quarto custom format is available [here](https://www.productive-r-workflow.com/r/bonus/lumo-quarto-template)
 
+```{r, message = FALSE, warning = FALSE, echo = FALSE, include = FALSE}
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(janitor)
+library(lubridate)
+library(here)
+library(cowplot)
+library(gt)
+library(gtsummary)
+library(gtreg)
+library(survival)
+library(survminer)
+library(epoxy)
+library(crayon)
+library(grid)
+library(workflowr)
+library(broom)
+library(labelled)
+library(ggalluvial)
+library(naniar)
+library(visdat)
+library(likert)
+library(sjlabelled)
 
+here("temp_lumo.Rmd")
+
+project_id <- "PHERGain"
+listings_date <- as.Date("2023-05-12")
+```
+
+```{r missing-qlq-c30-eval, fig.height=3, fig.width=3, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings <- read_excel(
+    here(paste0("data/", "MedOPP096 ", project_id, " 3-Year Listings Draft ", listings_date, ".xlsx")),
+    sheet = "QLQ-C30"
+  ) %>% 
+  clean_names() %>% 
+  rename(
+  patient = subject_id
+  ) %>% 
+  mutate(
+   eortc_qlq_c30_tp = factor(
+     eortc_qlq_c30,
+     levels = c("Baseline", "Cycle 2", "Before surgery", "End of treatment")
+     )
+   )
+
+data_temp_listings %>%
+  select(
+    date_qlq_c30
+  ) %>% 
+  vis_miss()
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings %>% 
+  select(date_qlq_c30) %>% 
+  miss_var_summary()
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings %>%
+  group_by(group_3) %>%
+  select(date_qlq_c30) %>%
+  miss_var_summary()
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_listings %>% 
+  group_by(group_3) %>%
+  select(date_qlq_c30) %>% 
+  mcar_test()
+```
+
+```{r completeness-barplot, message = FALSE, warning = FALSE, echo = FALSE}
+# Step 1: Ensure `timepoint` is included and convert it directly to character
+data_temp_qlq_c30 <- data_temp_listings %>%  
+  select(
+    patient, group_2, group_3, hormone_receptor_status, pet_response_conclusion,
+    p_cr_yp_t0_is_n0, eortc_qlq_c30_tp, date_qlq_c30, qlq_c30_01:qlq_c30_28
+  ) %>% 
+  rename(timepoint = eortc_qlq_c30_tp) %>% 
+  mutate(timepoint = as.character(timepoint))  # Ensure timepoint is a character
+
+# Step 2: Define recoding schemes (no changes)
+item_recode_scheme <- c("Not at All" = 1, "A Little" = 2, "Quite a Bit" = 3, "Very Much" = 4)
+
+# Step 3: Reshape the data
+data_long <- data_temp_qlq_c30 %>%  
+  pivot_longer(
+    cols = starts_with("qlq_c30_"),  
+    names_to = "item",  
+    values_to = "score"  
+  )
+
+# Step 4: Use `case_when` for recoding `timepoint`
+data_long <- data_long %>%  
+  mutate(
+    timepoint = case_when(
+      timepoint == "Baseline" ~ 1,
+      timepoint == "Cycle 2" ~ 2,
+      timepoint == "Before surgery" ~ 3,
+      timepoint == "End of treatment" ~ 4,
+      TRUE ~ NA_real_  # Handle other cases or NAs
+    ),
+    score = case_when(
+      score == "Not at All" ~ 1,
+      score == "A Little" ~ 2,
+      score == "Quite a Bit" ~ 3,
+      score == "Very Much" ~ 4,
+      TRUE ~ NA_real_  # Handle other cases or NAs
+    )
+  )
+
+# Step 1: Count the number of unique patients for each group
+total_patients_per_group <- data_long %>%
+  group_by(group_2) %>%
+  summarise(total_patients = n_distinct(patient), .groups = 'drop')
+
+# Count the number of patients for each timepoint and group
+patients_per_timepoint <- data_long %>%
+  filter(!is.na(date_qlq_c30)) %>%
+  group_by(group_2, timepoint) %>%
+  summarise(n_patients = n_distinct(patient), .groups = 'drop') %>%
+  left_join(total_patients_per_group, by = "group_2")  # Join total patients back
+
+# Create a bar plot with labels showing the number of patients and percentage at each timepoint, faceted by group_2
+patients_barplot <- ggplot(patients_per_timepoint, aes(x = factor(timepoint), y = n_patients, fill = group_2)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Use position dodge for side-by-side bars
+  geom_text(aes(label = paste0(n_patients, " (", round((n_patients / total_patients) * 100, 1), "%)")), 
+                vjust = -0.5, size = 3, position = position_dodge(width = 0.9)) +  # Add labels with counts and percentages
+  labs(
+    title = "Number of Patients Completing the QLQ-C30 Questionnaire at Each Timepoint",
+    x = "Timepoint",
+    y = "Number of Patients",
+    fill = " "
+  ) +
+  ylim(0, 350) +  # Force y-axis to reach 350
+  theme_minimal() +
+  scale_fill_manual(values = c("Group A" = "#DA0317", "Group B" = "#2C69A9")) +  # Custom colors for each group
+  facet_wrap(~ group_2)  # Facet by group_2
+
+# Display the plot
+patients_barplot
+```
+
+```{r qlq-c30-group-barplot, fig.height=12, fig.width=28, message = FALSE, warning = FALSE, echo = FALSE}
+summary_data <- data_long %>%
+  group_by(timepoint, item) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    sd_score = sd(score, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Count the number of patients scoring each value at each timepoint
+summary_counts <- data_long %>%
+  group_by(group_2, timepoint, item, score) %>%
+  summarise(count = n(), .groups = 'drop')  # Count the number of occurrences
+
+# Calculate the relative frequency for each score and group
+summary_counts_relative <- summary_counts %>%
+  group_by(group_2, item) %>%
+  mutate(relative_freq = count / sum(count)) %>%  # Calculate relative frequency
+  ungroup()
+
+# Update the item column using case_when()
+summary_counts_relative <- summary_counts_relative %>%
+  mutate(item = case_when(
+    item == "qlq_c30_01" ~ "01. Have trouble doing strenuous activities",
+    item == "qlq_c30_02" ~ "02. Have trouble taking a long walk",
+    item == "qlq_c30_03" ~ "03. Have trouble taking a short walk outside of the house",
+    item == "qlq_c30_04" ~ "04. Need to stay in bed or a chair during the day",
+    item == "qlq_c30_05" ~ "05. Need help with eating, dressing, washing or using the toilet",
+    item == "qlq_c30_06" ~ "06. Were limited in doing work or other daily activities",
+    item == "qlq_c30_07" ~ "07. Were limited in pursuing hobbies or other leisure time activities",
+    item == "qlq_c30_08" ~ "08. Were short of breath",
+    item == "qlq_c30_09" ~ "09. Had pain",
+    item == "qlq_c30_10" ~ "10. Needed to rest",
+    item == "qlq_c30_11" ~ "11. Had trouble sleeping",
+    item == "qlq_c30_12" ~ "12. Felt weak",
+    item == "qlq_c30_13" ~ "13. Lacked appetite",
+    item == "qlq_c30_14" ~ "14. Felt nauseous",
+    item == "qlq_c30_15" ~ "15. Vomited",
+    item == "qlq_c30_16" ~ "16. Had constipation",
+    item == "qlq_c30_17" ~ "17. Had diarrhea",
+    item == "qlq_c30_18" ~ "18. Were tired",
+    item == "qlq_c30_19" ~ "19. Pain interferred with daily activities",
+    item == "qlq_c30_20" ~ "20. Had difficulty concentrating",
+    item == "qlq_c30_21" ~ "21. Felt tense",
+    item == "qlq_c30_22" ~ "22. Felt worried",
+    item == "qlq_c30_23" ~ "23. Felt irritable",
+    item == "qlq_c30_24" ~ "24. Felt depressed",
+    item == "qlq_c30_25" ~ "25. Had difficulty remembering things",
+    item == "qlq_c30_26" ~ "26. Had familiy life interfered with",
+    item == "qlq_c30_27" ~ "27. Had social life interfered with",
+    item == "qlq_c30_28" ~ "28. Had financial difficulties",
+    TRUE ~ item  # Keep original value if no match
+  ))
+
+summary_counts_relative_baseline <- summary_counts_relative %>% 
+  filter(timepoint == 1)  # Filter for baseline timepoint
+
+# Create the faceted bar plot with relative frequencies as percentages
+qlq_c30_barplot_percentage <- ggplot(summary_counts_relative_baseline, aes(x = score, y = relative_freq, fill = group_2)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +  # Use position dodge for side-by-side bars
+  labs(
+    title = "Distribution of QLQ-C30 Scores at Baseline",
+    x = "QLQ-C30 score\n", # Y-axis label
+    y = "Patients (%)",  # X-axis label
+    fill = " "  # Legend title as a blank space
+  ) +
+  theme_minimal() +
+  facet_wrap(~ item) +  # Facet by item
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 12),
+        panel.grid.minor = element_blank()
+        ) +  # Optional: adjust y-axis text size for clarity
+  coord_flip() +  # Flip the bars
+  scale_fill_brewer(palette = "Set1") +  # Optional: use a color palette for better distinction
+  scale_x_continuous(breaks = 1:4, labels = c("Not at All", "A Little", "Quite a Bit", "Very Much")) +  # Set x-axis breaks and labels
+  scale_y_continuous(labels = scales::percent_format(scale = 100))  # Format y-axis as percentage
+
+# Save the plot
+ggsave(
+  here(paste0("output/", "figures/", project_id, "_qlq_c30_barplot_percentage_", ".png")),
+  plot = qlq_c30_barplot_percentage,
+  width = 60,
+  height = 30,
+  units = "cm",
+  dpi = 300
+  )
+
+# Display the plot
+qlq_c30_barplot_percentage
+```
