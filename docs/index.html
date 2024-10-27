@@ -13,7 +13,7 @@
 
 <title>Home</title>
 
-<script src="site_libs/header-attrs-2.27/header-attrs.js"></script>
+<script src="site_libs/header-attrs-2.28/header-attrs.js"></script>
 <script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
@@ -281,7 +281,7 @@ $(document).ready(function () {
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
 <span class="glyphicon glyphicon-list" aria-hidden="true"></span>
-workflowr <span class="glyphicon glyphicon-ok text-success"
+workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger"
 aria-hidden="true"></span>
 </button>
 </p>
@@ -292,8 +292,8 @@ aria-hidden="true"></span>
 </li>
 <li>
 <a data-toggle="tab" href="#checks"> Checks <span
-class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
-</a>
+class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> </a>
 </li>
 <li>
 <a data-toggle="tab" href="#versions">Past versions</a>
@@ -302,13 +302,13 @@ class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2024-10-02
+<strong>Last updated:</strong> 2024-10-27
 </p>
 <p>
 <strong>Checks:</strong> <span
-class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 2
+class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 1
 <span class="glyphicon glyphicon-exclamation-sign text-danger"
-aria-hidden="true"></span> 0
+aria-hidden="true"></span> 1
 </p>
 <p>
 <strong>Knit directory:</strong> <code>PHERGain/</code> <span
@@ -331,33 +331,36 @@ versions</em> tab lists the development history.
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguptodate">
-<span class="glyphicon glyphicon-ok text-success"
-aria-hidden="true"></span> <strong>R Markdown file:</strong> up-to-date
-</a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges">
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted
+changes </a>
 </p>
 </div>
-<div id="strongRMarkdownfilestronguptodate"
+<div id="strongRMarkdownfilestronguncommittedchanges"
 class="panel-collapse collapse">
 <div class="panel-body">
-<p>Great! Since the R Markdown file has been committed to the Git
-repository, you know the exact version of the code that produced these
-results.</p>
+<p>The R Markdown file has unstaged changes. To know which version of
+the R Markdown file created these results, you’ll want to first commit
+it to the Git repo. If you’re still working on the analysis, you can
+ignore this warning. When you’re finished, you can run
+<code>wflow_publish</code> to commit the R Markdown file and build the
+HTML.</p>
 </div>
 </div>
 </div>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree07ce8f793c47563c21b9d69f5f19c1ad35df314ftargetblank07ce8f7a">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree6bec0d5000ba8b8431ee68f3b7bbffe4365add19targetblank6bec0d5a">
 <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span> <strong>Repository version:</strong>
-<a href="https://github.com/MedsirScientific/PHERGain/tree/07ce8f793c47563c21b9d69f5f19c1ad35df314f" target="_blank">07ce8f7</a>
+<a href="https://github.com/MedsirScientific/PHERGain/tree/6bec0d5000ba8b8431ee68f3b7bbffe4365add19" target="_blank">6bec0d5</a>
 </a>
 </p>
 </div>
 <div
-id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree07ce8f793c47563c21b9d69f5f19c1ad35df314ftargetblank07ce8f7a"
+id="strongRepositoryversionstrongahrefhttpsgithubcomMedsirScientificPHERGaintree6bec0d5000ba8b8431ee68f3b7bbffe4365add19targetblank6bec0d5a"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -367,7 +370,7 @@ reproducibility.
 </p>
 <p>
 The results in this page were generated with repository version
-<a href="https://github.com/MedsirScientific/PHERGain/tree/07ce8f793c47563c21b9d69f5f19c1ad35df314f" target="_blank">07ce8f7</a>.
+<a href="https://github.com/MedsirScientific/PHERGain/tree/6bec0d5000ba8b8431ee68f3b7bbffe4365add19" target="_blank">6bec0d5</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -385,46 +388,12 @@ Ignored files:
     Ignored:    .DS_Store
     Ignored:    .Rhistory
     Ignored:    .Rproj.user/
-    Ignored:    analysis/.DS_Store
-    Ignored:    data/.DS_Store
-    Ignored:    data/2023-09-04/
-    Ignored:    data/2024-09-04/
-    Ignored:    data/2024-09-10/
-    Ignored:    data/2024-09-18/
-    Ignored:    data/2024-09-19/
-    Ignored:    data/2024-09-25/
-    Ignored:    data/2024-09-30/
-    Ignored:    data/MEDOPP096 Global Status 2023.xlsx
-    Ignored:    data/MedOPP096 PHERGain 3-Year Listings Draft 2023-05-12.xlsx
-    Ignored:    data/PHERGain_HER2DX.xlsx
-    Ignored:    data/PHERGain_HRQoL_2024-10-02.xlsx
-    Ignored:    data/PHERGain_data-management_2023-04-24.xlsx
-    Ignored:    data/PHERGain_sample-IDs_2024-09-04.xlsx
-    Ignored:    output/.DS_Store
-
-Untracked files:
-    Untracked:  output/figures/
-    Untracked:  output/listings/
-    Untracked:  output/tables/
+    Ignored:    temp_lumo/_extensions/holtzy/lumo/.DS_Store
 
 Unstaged changes:
-    Deleted:    analysis/PHERGain_aes-by-soc_table_2023-03-26.docx
-    Deleted:    analysis/WP1_esmo23-efficacy.Rmd
-    Deleted:    analysis/WP1_esmo23-efficacy_2023-04-24.Rmd
-    Deleted:    analysis/WP2_esmo23-safety_2023-04-27.Rmd
-    Deleted:    analysis/WP3_manuscript_results_2023-05-05.Rmd
-    Modified:   analysis/WP5_5y_fu_tracker.Rmd
-    Deleted:    output/PHERGain_Figure1_iDFS_groupB_ITT_2023-04-25.png
-    Deleted:    output/PHERGain_Figure1_iDFS_groupB_ITT_annotated_2023-04-25.png
-    Deleted:    output/PHERGain_Figure2_iDFS_groupB_ITT_PET-responders-pCR_2023-04-25.png
-    Deleted:    output/PHERGain_Figure3_iDFS_groupB_PP_2023-04-25.png
-    Deleted:    output/PHERGain_Figure4_iDFS_groupB_ITT_by-HR_2023-04-25.png
-    Deleted:    output/PHERGain_Figure5_DDFS_groupB_ITT_2023-04-25.png
-    Deleted:    output/PHERGain_Figure6_EFS_groupB_ITT_2023-04-25.png
-    Deleted:    output/PHERGain_Figure7_OS_groupB_ITT_2023-04-25.png
-    Deleted:    output/PHERGain_Figure8_iDFS_groupA_ITT_2023-04-25.png
-    Deleted:    output/PHERGain_Figure8_iDFS_groupA_ITT_annotated_2023-04-25.png
-    Deleted:    output/PHERGain_teaes_table_2023-05-04.docx
+    Modified:   analysis/index.Rmd
+    Modified:   temp_lumo/temp_lumo.html
+    Modified:   temp_lumo/temp_lumo.qmd
 
 </code></pre>
 <p>
@@ -439,7 +408,6 @@ have uncommitted changes.
 <hr>
 </div>
 <div id="versions" class="tab-pane fade">
-
 <p>
 These are the previous versions of the repository in which changes were
 made to the R Markdown (<code>analysis/index.Rmd</code>) and HTML
@@ -469,6 +437,23 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/MedsirScientific/PHERGain/9f7bc9e831b2a5f0633f6db5e47eaf9609dbac98/docs/index.html" target="_blank">9f7bc9e</a>
+</td>
+<td>
+Daniel Alcalá
+</td>
+<td>
+2024-10-02
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -833,7 +818,13 @@ results</a></p></li>
 the 5-year extension of the study</a></p></li>
 <li><p><a href="WP6_HRQoL.html">WP6. Exploratory analysis of
 health-related quality of life data</a></p></li>
+<li><p><a href="temp_lumo.html">TEMP. Quarto report testing</a></p></li>
 </ul>
+</div>
+</div>
+</div>
+</div>
+</div>
 
 
 <!-- Adjust MathJax settings so that all math formulae are shown using
