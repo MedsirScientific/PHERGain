@@ -29,7 +29,7 @@ library(ggalluvial)
 here("WP5_5y_fu_tracker.Rmd")
 
 project_id <- "PHERGain"
-cutoff_date <- as.Date("2024-09-25")
+cutoff_date <- as.Date("2024-10-25")
 listings_date <- as.Date("2023-05-12")
 ```
 
@@ -264,6 +264,9 @@ data_temp_fu <- read_excel(
   rename(
     group = cohort,
     status = vital_status,
+    mammography_not_performed_reason = "if_no_specify_the_reason",
+    mammography_date = "date_of_mammography",
+    mammography_lesions = "are_measurables_lesions_found_or_the_test_is_performed_3_years_from_surgery_date"
   ) %>% 
   mutate(
     contact_date = dmy(contact_date),
@@ -271,7 +274,11 @@ data_temp_fu <- read_excel(
   select(
     patient,
     follow_up_visit,
-    contact_date
+    contact_date,
+    mammography_performed,
+    mammography_not_performed_reason,
+    mammography_date,
+    mammography_lesions
   ) %>% 
   filter(
     follow_up_visit %in% values_to_keep
@@ -297,7 +304,11 @@ data_temp_fu_visits <- merge(
     last_contact_date,
     status,
     actual_years_since_surgery,
-    fu_status
+    fu_status,
+    mammography_performed,
+    mammography_not_performed_reason,
+    mammography_date,
+    mammography_lesions
   )
 
 data_temp_itt <- data_fu %>% 
@@ -330,20 +341,50 @@ data_temp_fu_visits_itt <- merge(
     last_contact_date,
     status,
     actual_years_since_surgery,
-    fu_status
+    fu_status,
+    mammography_performed,
+    mammography_not_performed_reason,
+    mammography_date,
+    mammography_lesions
   )
 
 remove(data_temp_itt, data_temp_fu, data_temp_fu_visits, data_temp_itt)
 
+data_ecrf_update <- data_temp_fu_visits_itt %>% 
+  mutate(
+    follow_up_year = substr(follow_up_visit, 1, 1),
+    follow_up_year = if_else(
+      follow_up_year == "O", NA, follow_up_year),
+    theoretical_date = as.Date(surgery_date) + years(as.numeric(follow_up_year)),
+    difference = as.numeric(difftime(contact_date, theoretical_date, units = "weeks"))
+  ) %>% 
+  rename(
+    real_contact_date = contact_date
+  ) %>% 
+  select(
+    site,
+    patient,
+    surgery_date,
+    # follow_up_visit,
+    follow_up_year,
+    theoretical_date,
+    real_contact_date,
+    difference,
+    mammography_performed,
+    mammography_not_performed_reason,
+    mammography_date,
+    mammography_lesions
+  )
+
 write_xlsx(
-  data_temp_fu_visits_itt,
+  data_ecrf_update,
   here(paste0("output/", "listings/", project_id, "_ecrf-update-tracker_", cutoff_date, ".xlsx"))
   )
 
 data_temp_trial <- read_excel(
   here(paste0("data/", "MEDOPP096 Global Status 2023", ".xlsx")),
   sheet = "ICF&FU",
-  skip = 8
+  skip = 10
   ) %>% 
   clean_names() %>% 
   rename(
@@ -355,6 +396,7 @@ data_temp_trial <- read_excel(
   select(
     patient,
     icf_extension_trial,
+    comments
   )
 
 data_fu <- merge(
@@ -393,7 +435,8 @@ data_fu <- merge(
     last_contact_date,
     status,
     actual_years_since_surgery,
-    fu_status
+    fu_status,
+    comments
   ) %>% 
   arrange(
     patient,
@@ -415,7 +458,7 @@ data_fu %>%
     n = n()
   ) %>% 
   rename(
-    "Data at 2024-09-25" = fu_status
+    "Data at 2024-10-25" = fu_status
   )
 ```
 
@@ -458,10 +501,10 @@ data_fu %>%
 <!-- Under development -->
 
 ```{r, message = FALSE, warning = FALSE, echo = FALSE}
-prior_cutoff_date <- as.Date("2024-09-20")
+prior_cutoff_date <- as.Date("2024-10-18")
 
 data_temp_sankey <- read_excel(
-  here(paste0("output/", "listings/", project_id, "_icf-extension-tracker_", prior_cutoff_date, ".xlsx")),
+  here(paste0("output/", "listings/", project_id, "_icf-extension-tracker_clean_", prior_cutoff_date, ".xlsx")),
   sheet = "Follow-up",
   skip = 1
   ) %>% 
@@ -480,7 +523,7 @@ data_temp_sankey %>%
     n = n()
   ) %>% 
   rename(
-    "Data at 2024-09-20" = source
+    "Data at 2024-10-18 (prior)" = source
   )
 
 data_sankey <- merge(
@@ -525,14 +568,14 @@ sankey <- ggplot(
     y = count)
   ) +
   geom_alluvium(
-    aes(fill = source),
+    aes(fill = target),
     width = 1/12
     ) +
   geom_stratum(aes(fill = after_stat(stratum)), width = 1/12, color = "black") +
   geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2.8, angle = 90) +
   scale_x_discrete(
     limits = c("Source", "Target"),
-    labels = c("2024-09-20", "2024-09-25"),
+    labels = c("2024-10-18", "2024-10-25"),
     expand = c(0.15, 0.05)
     ) +
   scale_fill_manual(values = custom_colors) +
@@ -540,11 +583,10 @@ sankey <- ggplot(
     title = "Flow of follow-up data entry since last check",
     x = "Timepoint", y = "Number of Patients"
     ) +
-  guides(fill = guide_legend(title = "Follow-up status at 2024-09-20")) +
+  guides(fill = guide_legend(title = "Follow-up status at 2024-10-25")) +
   theme_minimal() +
   theme(legend.position = "none")
 
-# Save the plot
 ggsave(
   here(paste0("output/", "figures/", project_id, "_sankey_", cutoff_date, ".png")),
   plot = sankey,
@@ -553,4 +595,78 @@ ggsave(
   )
 
 sankey
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+data_temp_sites <- read_excel(
+  here(paste0("data/", project_id, "_siteID", ".xlsx"))
+  ) %>% 
+  clean_names() %>% 
+  rename(
+    site = site_code
+  ) %>% 
+  mutate(
+    site = ifelse(nchar(site) == 3, paste0("0", site), site)
+  )
+
+data_temp_sites_fu <- merge(
+  data_temp_sites,
+  data_fu,
+  by = "site",
+  all = TRUE
+  ) %>% 
+  mutate(
+    dummy_icf_filled_positive = if_else(
+      icf_extension == "Yes" & icf_extension_trial == "Yes", 1, NA),
+    dummy_icf_filled_positive = if_else(
+      patient == "0102-032", 1, dummy_icf_filled_positive),
+    dummy_icf_filled_negative = if_else(    
+      icf_extension == "No" & icf_extension_trial == "No", 1, NA),
+    dummy_icf_filled_oral = if_else(
+      icf_extension == "Yes" & icf_extension_trial == "Oral", 1, NA),
+    dummy_icf_blank_positive = if_else(
+      is.na(icf_extension) & icf_extension_trial == "Yes", 1, NA),
+    dummy_icf_blank_negative = if_else(
+      is.na(icf_extension) & icf_extension_trial == "No", 1, NA),
+    dummy_icf_blank_missing = if_else(
+      is.na(icf_extension) & icf_extension_trial == "Not yet", 1, NA),
+    dummy_icf_blank_oral = if_else(
+      is.na(icf_extension) & icf_extension_trial == "Oral", 1, NA),
+    dummy_data_without_consent = if_else(
+      is.na(icf_extension) & fu_status == "≥5 years", 1, NA),
+    dummy_data_without_consent = if_else(
+      is.na(icf_extension) & fu_status == "≥4 <5 years", 1, dummy_data_without_consent),
+    dummy_data_without_consent = if_else(
+      patient == "0110-003", NA, dummy_data_without_consent),
+    dummy_icf_negative_trial_positive = if_else(
+      icf_extension == "No" & icf_extension_trial == "Yes", 1, NA),
+    dummy_icf_negative_trial_positive = if_else(
+      icf_extension == "No" & icf_extension_trial == "Oral", 1, dummy_icf_negative_trial_positive),
+    dummy_fu_less_than_4_years = if_else(
+      fu_status == "<4 years", 1, NA),
+    dummy_fu_more_than_4_years = if_else(
+      fu_status == "≥4 <5 years", 1, NA),
+    dummy_fu_more_than_5_years = if_else(
+      fu_status == "≥5 years", 1, NA),
+    dummy_confirm_loss_fu = if_else(
+      status == "Lost to follow-up", 1, NA),
+    dummy_confirm_loss_fu = if_else(
+      patient == "0102-004", 1, dummy_confirm_loss_fu),
+  )
+
+data_sites_fu <- data_temp_sites_fu %>%
+  group_by(site) %>%
+  summarise(across(starts_with("dummy"), ~ sum(. == 1, na.rm = TRUE)))
+
+data_sites_fu <- merge(
+  data_temp_sites,
+  data_sites_fu,
+  by = "site",
+  all = TRUE
+  )
+
+write_xlsx(
+  data_sites_fu,
+  here(paste0("output/", "listings/", project_id, "_site-fu-tracker_", cutoff_date, ".xlsx"))
+  )
 ```
